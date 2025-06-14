@@ -11,7 +11,17 @@ import SwiftUI
 struct ProjectManagerApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ProjectsListView()
+                .frame(minWidth: 1200, minHeight: 700)
+        }
+        .commands {
+            SidebarCommands()
+        }
+        .windowStyle(.automatic)
+        .defaultSize(width: 1400, height: 800)
+        
+        Settings {
+            PreferencesView()
         }
     }
 }
