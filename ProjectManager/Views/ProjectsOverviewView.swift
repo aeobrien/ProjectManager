@@ -7,6 +7,7 @@ struct ProjectsOverviewView: View {
     @State private var editingProjects: Set<UUID> = []
     @State private var showingNewProjectForm = false
     @State private var showingProjectsList = false
+    @State private var showingFocusBoard = false
     @State private var selectedProject: Project?
     @State private var projectToRename: Project?
     
@@ -43,6 +44,10 @@ struct ProjectsOverviewView: View {
                         migrateExistingStatusToLog()
                     }
                     .help("Migrate existing current status entries to project logs")
+                    
+                    Button(action: { showingFocusBoard = true }) {
+                        Label("Focus Board", systemImage: "square.3.stack.3d")
+                    }
                     
                     Button(action: { showingProjectsList = true }) {
                         Label("Projects List", systemImage: "folder")
@@ -158,6 +163,11 @@ struct ProjectsOverviewView: View {
                         projectsManager.selectedProject = selected
                     }
                 }
+        }
+        .sheet(isPresented: $showingFocusBoard) {
+            FocusBoardView()
+                .environmentObject(projectsManager)
+                .frame(minWidth: 1200, minHeight: 700)
         }
         .sheet(item: $projectToRename) { project in
             RenameProjectSheet(project: project, projectsManager: projectsManager)
