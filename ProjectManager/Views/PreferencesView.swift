@@ -14,12 +14,17 @@ struct PreferencesView: View {
                 Label("General", systemImage: "gear")
             }
             
+            IgnoredFoldersView(preferencesManager: preferencesManager)
+            .tabItem {
+                Label("Ignored Folders", systemImage: "eye.slash")
+            }
+            
             AppearancePreferencesView()
             .tabItem {
                 Label("Appearance", systemImage: "paintbrush")
             }
         }
-        .frame(width: 500, height: 300)
+        .frame(width: 500, height: 400)
         .fileImporter(
             isPresented: $showingFolderPicker,
             allowedContentTypes: [.folder],
@@ -112,5 +117,111 @@ struct AppearancePreferencesView: View {
         }
         .formStyle(.grouped)
         .padding()
+    }
+}
+
+struct IgnoredFoldersView: View {
+    @ObservedObject var preferencesManager: PreferencesManager
+    @State private var selectedFolders: Set<String> = []
+    @State private var newFolderName = ""
+    @State private var showingAddField = false
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("Ignored Folders")
+                    .font(.headline)
+                
+                Spacer()
+                
+                Button(action: { showingAddField.toggle() }) {
+                    Image(systemName: "plus")
+                }
+                .disabled(showingAddField)
+            }
+            .padding()
+            
+            Divider()
+            
+            // List of ignored folders
+            if preferencesManager.ignoredFolders.isEmpty && !showingAddField {
+                VStack(spacing: 10) {
+                    Image(systemName: "folder.badge.minus")
+                        .font(.system(size: 40))
+                        .foregroundColor(.secondary)
+                    Text("No ignored folders")
+                        .foregroundColor(.secondary)
+                    Text("Ignored folders won't appear in the projects list")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(selection: $selectedFolders) {
+                    if showingAddField {
+                        HStack {
+                            TextField("Folder name", text: $newFolderName)
+                                .textFieldStyle(.plain)
+                                .onSubmit {
+                                    addFolder()
+                                }
+                            
+                            Button("Add") {
+                                addFolder()
+                            }
+                            .disabled(newFolderName.isEmpty)
+                            
+                            Button("Cancel") {
+                                newFolderName = ""
+                                showingAddField = false
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    
+                    ForEach(Array(preferencesManager.ignoredFolders).sorted(), id: \.self) { folder in
+                        HStack {
+                            Image(systemName: "folder.fill")
+                                .foregroundColor(.secondary)
+                            Text(folder)
+                            Spacer()
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+                .listStyle(.inset)
+            }
+            
+            Divider()
+            
+            // Footer buttons
+            HStack {
+                Button("Remove Selected") {
+                    for folder in selectedFolders {
+                        preferencesManager.removeIgnoredFolder(folder)
+                    }
+                    selectedFolders.removeAll()
+                }
+                .disabled(selectedFolders.isEmpty)
+                
+                Spacer()
+                
+                if !preferencesManager.ignoredFolders.isEmpty {
+                    Button("Clear All") {
+                        preferencesManager.clearIgnoredFolders()
+                        selectedFolders.removeAll()
+                    }
+                }
+            }
+            .padding()
+        }
+    }
+    
+    private func addFolder() {
+        guard !newFolderName.isEmpty else { return }
+        preferencesManager.addIgnoredFolder(newFolderName)
+        newFolderName = ""
+        showingAddField = false
     }
 }

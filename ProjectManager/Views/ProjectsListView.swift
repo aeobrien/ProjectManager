@@ -19,6 +19,13 @@ struct ProjectsListView: View {
                         Button("Rename") {
                             projectToRename = project
                         }
+                        
+                        Button("Ignore Project") {
+                            ignoreProject(project)
+                        }
+                        
+                        Divider()
+                        
                         Button("Delete", role: .destructive) {
                             deleteProject(project)
                         }
@@ -66,6 +73,7 @@ struct ProjectsListView: View {
             if let project = selectedProject {
                 ProjectDetailView(project: project)
                     .frame(minWidth: 800)
+                    .id(project.id) // Force view to recreate when project changes
             } else {
                 ContentUnavailableView {
                     Label("Select a Project", systemImage: "sidebar.left")
@@ -108,6 +116,14 @@ struct ProjectsListView: View {
             }
         } catch {
             print("Error deleting project: \(error)")
+        }
+    }
+    
+    private func ignoreProject(_ project: Project) {
+        preferencesManager.addIgnoredFolder(project.folderPath.lastPathComponent)
+        projectsManager.loadProjects()
+        if selectedProject == project {
+            selectedProject = nil
         }
     }
 }

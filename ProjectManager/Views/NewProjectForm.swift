@@ -5,10 +5,9 @@ struct NewProjectForm: View {
     @Environment(\.dismiss) private var dismiss
     
     @State private var projectName = ""
-    @State private var overview = ""
-    @State private var currentStatus = ""
-    @State private var initialTodos = ""
-    @State private var notes = ""
+    @State private var coreConcept = ""
+    @State private var guidingPrinciples = ""
+    @State private var keyFeatures = ""
     @State private var showingError = false
     @State private var errorMessage = ""
     
@@ -25,13 +24,13 @@ struct NewProjectForm: View {
                             .textFieldStyle(.roundedBorder)
                     }
                     
-                    Section("Overview") {
-                        TextEditor(text: $overview)
+                    Section("Core Concept") {
+                        TextEditor(text: $coreConcept)
                             .frame(minHeight: 80)
                             .overlay(
                                 Group {
-                                    if overview.isEmpty {
-                                        Text("Describe what this project is about...")
+                                    if coreConcept.isEmpty {
+                                        Text("What is this project and its primary purpose?")
                                             .foregroundColor(.secondary)
                                             .padding(.horizontal, 4)
                                             .padding(.vertical, 8)
@@ -42,13 +41,13 @@ struct NewProjectForm: View {
                             )
                     }
                     
-                    Section("Current Status") {
-                        TextEditor(text: $currentStatus)
+                    Section("Guiding Principles") {
+                        TextEditor(text: $guidingPrinciples)
                             .frame(minHeight: 60)
                             .overlay(
                                 Group {
-                                    if currentStatus.isEmpty {
-                                        Text("Where does the project stand now?")
+                                    if guidingPrinciples.isEmpty {
+                                        Text("Philosophy, values, and goals driving the project")
                                             .foregroundColor(.secondary)
                                             .padding(.horizontal, 4)
                                             .padding(.vertical, 8)
@@ -59,31 +58,13 @@ struct NewProjectForm: View {
                             )
                     }
                     
-                    Section("Initial To-Do Items") {
-                        TextEditor(text: $initialTodos)
+                    Section("Key Features") {
+                        TextEditor(text: $keyFeatures)
                             .frame(minHeight: 80)
                             .overlay(
                                 Group {
-                                    if initialTodos.isEmpty {
-                                        Text("Enter tasks, one per line...")
-                                            .foregroundColor(.secondary)
-                                            .padding(.horizontal, 4)
-                                            .padding(.vertical, 8)
-                                            .allowsHitTesting(false)
-                                    }
-                                },
-                                alignment: .topLeading
-                            )
-                            .font(.system(.body, design: .monospaced))
-                    }
-                    
-                    Section("Notes") {
-                        TextEditor(text: $notes)
-                            .frame(minHeight: 60)
-                            .overlay(
-                                Group {
-                                    if notes.isEmpty {
-                                        Text("Any additional context or ideas...")
+                                    if keyFeatures.isEmpty {
+                                        Text("List the main features or components...")
                                             .foregroundColor(.secondary)
                                             .padding(.horizontal, 4)
                                             .padding(.vertical, 8)
@@ -129,16 +110,11 @@ struct NewProjectForm: View {
         guard !trimmedName.isEmpty else { return }
         
         var projectOverview = ProjectOverview()
-        projectOverview.overview = overview.isEmpty ? "[Short description]" : overview
-        projectOverview.currentStatus = currentStatus.isEmpty ? "[Where the project stands now]" : currentStatus
-        projectOverview.notes = notes.isEmpty ? "[Any extra context or ideas]" : notes
+        projectOverview.coreConcept = coreConcept.isEmpty ? "[Comprehensive overview of what the project is and its primary purpose]" : coreConcept
+        projectOverview.guidingPrinciples = guidingPrinciples.isEmpty ? "[The underlying philosophy, values, and goals driving the project]" : guidingPrinciples
+        projectOverview.keyFeatures = keyFeatures.isEmpty ? "[Detailed list of all features/components with descriptions]" : keyFeatures
         
-        if !initialTodos.isEmpty {
-            let todos = initialTodos.split(separator: "\n").map { line in
-                TodoItem(text: String(line).trimmingCharacters(in: .whitespacesAndNewlines), isCompleted: false)
-            }
-            projectOverview.todoItems = todos.filter { !$0.text.isEmpty }
-        }
+        // The template will handle creating the rest of the structure
         
         do {
             try projectsManager.createProject(name: trimmedName, overview: projectOverview)

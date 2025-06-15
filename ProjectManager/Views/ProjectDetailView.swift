@@ -3,7 +3,9 @@ import SwiftUI
 struct ProjectDetailView: View {
     let project: Project
     @StateObject private var viewModel: OverviewEditorViewModel
-    @State private var selectedSection: String? = "overview"
+    @State private var selectedSection: String?
+    @State private var showFullDocument = true
+    @State private var scrollToSection: String?
     
     init(project: Project) {
         self.project = project
@@ -14,86 +16,188 @@ struct ProjectDetailView: View {
         GeometryReader { geometry in
             HStack(spacing: 0) {
                 // Sidebar - 25% of remaining space after project list
-                List(selection: $selectedSection) {
-                    if viewModel.hasUnstructuredContent {
-                        Section("Migration Required") {
-                            HStack {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundColor(.orange)
-                                Text("Migrate Overview")
-                                    .foregroundColor(.primary)
-                            }
-                            .tag("migrate")
+                VStack(spacing: 0) {
+                    if !viewModel.hasUnstructuredContent {
+                        Toggle(isOn: $showFullDocument) {
+                            Label("Full Document", systemImage: "doc.text")
                         }
-                    } else {
-                        Section("Overview") {
-                            SidebarItem(id: "overview", icon: "doc.text", title: "Overview")
-                            SidebarItem(id: "status", icon: "info.circle", title: "Current Status")
-                            SidebarItem(id: "todo", icon: "checklist", title: "To-Do List")
-                            SidebarItem(id: "log", icon: "clock", title: "Log")
-                            SidebarItem(id: "related", icon: "link", title: "Related Projects")
-                            SidebarItem(id: "notes", icon: "note.text", title: "Notes")
-                        }
+                        .toggleStyle(.button)
+                        .padding(.horizontal)
+                        .padding(.vertical, 8)
+                        
+                        Divider()
                     }
                     
-                    Section("Files") {
-                        SidebarItem(id: "files", icon: "folder", title: "Project Files")
+                    List(selection: $selectedSection) {
+                        if viewModel.hasUnstructuredContent {
+                            Section("Migration Required") {
+                                HStack {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundColor(.orange)
+                                    Text("Migrate Overview")
+                                        .foregroundColor(.primary)
+                                }
+                                .tag("migrate")
+                            }
+                        } else {
+                            Section("Project Info") {
+                                SidebarItem(id: "version", icon: "clock.arrow.circlepath", title: "Version History")
+                                SidebarItem(id: "concept", icon: "lightbulb", title: "Core Concept")
+                                SidebarItem(id: "principles", icon: "flag", title: "Guiding Principles")
+                                SidebarItem(id: "features", icon: "star", title: "Key Features")
+                                SidebarItem(id: "architecture", icon: "building.2", title: "Architecture")
+                            }
+                            
+                            Section("Progress") {
+                                SidebarItem(id: "roadmap", icon: "map", title: "Implementation Roadmap")
+                                SidebarItem(id: "status", icon: "chart.line.uptrend.xyaxis", title: "Current Status")
+                                SidebarItem(id: "next", icon: "arrow.right.circle", title: "Next Steps")
+                            }
+                            
+                            Section("Details") {
+                                SidebarItem(id: "challenges", icon: "exclamationmark.triangle", title: "Challenges")
+                                SidebarItem(id: "experience", icon: "person.2", title: "User Experience")
+                                SidebarItem(id: "metrics", icon: "chart.bar", title: "Success Metrics")
+                            }
+                            
+                            Section("Documentation") {
+                                SidebarItem(id: "research", icon: "book", title: "Research")
+                                SidebarItem(id: "notes", icon: "questionmark.circle", title: "Open Questions")
+                                SidebarItem(id: "log", icon: "calendar", title: "Project Log")
+                            }
+                        }
+                        
+                        Section("Files") {
+                            SidebarItem(id: "files", icon: "folder", title: "Project Files")
+                        }
+                    }
+                    .listStyle(SidebarListStyle())
+                    .onChange(of: selectedSection) { newSection in
+                        if showFullDocument && newSection != "files" {
+                            scrollToSection = newSection
+                        }
                     }
                 }
-                .listStyle(SidebarListStyle())
                 .frame(width: geometry.size.width * 0.25)
                 
                 Divider()
                 
                 // Content area - 75% of remaining space
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        if viewModel.hasUnstructuredContent && (selectedSection == nil || selectedSection == "migrate") {
+                Group {
+                    if viewModel.hasUnstructuredContent && (selectedSection == nil || selectedSection == "migrate") {
+                        ScrollView {
                             UnstructuredContentView(viewModel: viewModel)
-                        } else if !viewModel.hasUnstructuredContent {
-                            switch selectedSection {
-                            case "overview":
-                                OverviewSectionView(
-                                    title: "Overview",
-                                    content: $viewModel.projectOverview.overview,
-                                    onSave: viewModel.saveOverview
-                                )
-                            case "status":
-                                OverviewSectionView(
-                                    title: "Current Status",
-                                    content: $viewModel.projectOverview.currentStatus,
-                                    onSave: viewModel.saveOverview
-                                )
-                            case "todo":
-                                TodoListView(viewModel: viewModel)
-                            case "log":
-                                OverviewSectionView(
-                                    title: "Log",
-                                    content: $viewModel.projectOverview.log,
-                                    onSave: viewModel.saveOverview
-                                )
-                            case "related":
-                                RelatedProjectsView(
-                                    relatedProjects: $viewModel.projectOverview.relatedProjects,
-                                    onSave: viewModel.saveOverview
-                                )
-                            case "notes":
-                                OverviewSectionView(
-                                    title: "Notes",
-                                    content: $viewModel.projectOverview.notes,
-                                    onSave: viewModel.saveOverview
-                                )
-                            case "files":
-                                ProjectFilesView(project: project)
-                            default:
-                                EmptyView()
-                            }
-                        } else if selectedSection == "files" {
+                                .padding()
+                        }
+                    } else if !viewModel.hasUnstructuredContent && showFullDocument && selectedSection != "files" {
+                        FullDocumentView(viewModel: viewModel, scrollToSection: $scrollToSection)
+                    } else if !viewModel.hasUnstructuredContent && selectedSection == "files" {
+                        ScrollView {
                             ProjectFilesView(project: project)
+                                .padding()
+                        }
+                    } else if !viewModel.hasUnstructuredContent {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 20) {
+                                switch selectedSection {
+                                // Project Info
+                                case "version":
+                                    OverviewSectionView(
+                                        title: "Version History",
+                                        content: $viewModel.projectOverview.versionHistory,
+                                        onSave: viewModel.saveOverview
+                                    )
+                                case "concept":
+                                    OverviewSectionView(
+                                        title: "Core Concept",
+                                        content: $viewModel.projectOverview.coreConcept,
+                                        onSave: viewModel.saveOverview
+                                    )
+                                case "principles":
+                                    OverviewSectionView(
+                                        title: "Guiding Principles & Intentions",
+                                        content: $viewModel.projectOverview.guidingPrinciples,
+                                        onSave: viewModel.saveOverview
+                                    )
+                                case "features":
+                                    OverviewSectionView(
+                                        title: "Key Features & Functionality",
+                                        content: $viewModel.projectOverview.keyFeatures,
+                                        onSave: viewModel.saveOverview
+                                    )
+                                case "architecture":
+                                    OverviewSectionView(
+                                        title: "Architecture & Structure",
+                                        content: $viewModel.projectOverview.architecture,
+                                        onSave: viewModel.saveOverview
+                                    )
+                                // Progress
+                                case "roadmap":
+                                    OverviewSectionView(
+                                        title: "Implementation Roadmap",
+                                        content: $viewModel.projectOverview.implementationRoadmap,
+                                        onSave: viewModel.saveOverview,
+                                        isMarkdown: true
+                                    )
+                                case "status":
+                                    OverviewSectionView(
+                                        title: "Current Status & Progress",
+                                        content: $viewModel.projectOverview.currentStatus,
+                                        onSave: viewModel.saveOverview
+                                    )
+                                case "next":
+                                    OverviewSectionView(
+                                        title: "Next Steps",
+                                        content: $viewModel.projectOverview.nextSteps,
+                                        onSave: viewModel.saveOverview
+                                    )
+                                // Details
+                                case "challenges":
+                                    OverviewSectionView(
+                                        title: "Challenges & Solutions",
+                                        content: $viewModel.projectOverview.challenges,
+                                        onSave: viewModel.saveOverview
+                                    )
+                                case "experience":
+                                    OverviewSectionView(
+                                        title: "User/Audience Experience",
+                                        content: $viewModel.projectOverview.userExperience,
+                                        onSave: viewModel.saveOverview
+                                    )
+                                case "metrics":
+                                    OverviewSectionView(
+                                        title: "Success Metrics",
+                                        content: $viewModel.projectOverview.successMetrics,
+                                        onSave: viewModel.saveOverview
+                                    )
+                                // Documentation
+                                case "research":
+                                    OverviewSectionView(
+                                        title: "Research & References",
+                                        content: $viewModel.projectOverview.research,
+                                        onSave: viewModel.saveOverview
+                                    )
+                                case "notes":
+                                    OverviewSectionView(
+                                        title: "Open Questions & Considerations",
+                                        content: $viewModel.projectOverview.openQuestions,
+                                        onSave: viewModel.saveOverview
+                                    )
+                                case "log":
+                                    OverviewSectionView(
+                                        title: "Project Log",
+                                        content: $viewModel.projectOverview.projectLog,
+                                        onSave: viewModel.saveOverview,
+                                        isMarkdown: true
+                                    )
+                                default:
+                                    EmptyView()
+                                }
+                            }
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(width: geometry.size.width * 0.75)
             }
@@ -104,11 +208,10 @@ struct ProjectDetailView: View {
         }
         .onReceive(viewModel.$hasUnstructuredContent) { hasUnstructured in
             // Set selection after content is loaded
-            if hasUnstructured && (selectedSection == nil || selectedSection == "overview") {
+            if hasUnstructured {
                 selectedSection = "migrate"
-            } else if !hasUnstructured && selectedSection == nil {
-                selectedSection = "overview"
             }
+            // For structured content, leave selection as nil to show full document
         }
         .onChange(of: viewModel.hasUnstructuredContent) { hasUnstructured in
             if hasUnstructured {
@@ -133,6 +236,7 @@ struct OverviewSectionView: View {
     let title: String
     @Binding var content: String
     let onSave: () -> Void
+    var isMarkdown: Bool = false
     @State private var isEditing = false
     
     var body: some View {
@@ -165,6 +269,13 @@ struct OverviewSectionView: View {
                     Text("No content yet. Click the edit button to add content.")
                         .foregroundColor(.secondary)
                         .italic()
+                } else if isMarkdown {
+                    ScrollView {
+                        MarkdownTextView(markdown: content) { lineIndex, isChecked in
+                            handleCheckboxToggle(lineIndex: lineIndex, isChecked: isChecked)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 } else {
                     Text(content)
                         .font(.body)
@@ -172,5 +283,27 @@ struct OverviewSectionView: View {
                 }
             }
         }
+    }
+    
+    private func handleCheckboxToggle(lineIndex: Int, isChecked: Bool) {
+        // Update the content with toggled checkbox
+        var lines = content.split(separator: "\n", omittingEmptySubsequences: false)
+        guard lineIndex < lines.count else { return }
+        
+        let line = String(lines[lineIndex])
+        let newLine: String
+        
+        if line.contains("- [ ]") {
+            newLine = line.replacingOccurrences(of: "- [ ]", with: "- [x]")
+        } else if line.contains("- [x]") || line.contains("- [X]") {
+            newLine = line.replacingOccurrences(of: "- [x]", with: "- [ ]")
+                         .replacingOccurrences(of: "- [X]", with: "- [ ]")
+        } else {
+            newLine = line
+        }
+        
+        lines[lineIndex] = Substring(newLine)
+        content = lines.joined(separator: "\n")
+        onSave()
     }
 }

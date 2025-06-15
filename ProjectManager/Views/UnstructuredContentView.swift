@@ -5,8 +5,6 @@ struct UnstructuredContentView: View {
     @State private var showingMigrationAlert = false
     
     var body: some View {
-        let _ = print("UnstructuredContentView - rawContent length: \(viewModel.rawContent.count)")
-        let _ = print("UnstructuredContentView - hasUnstructuredContent: \(viewModel.hasUnstructuredContent)")
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
@@ -27,100 +25,127 @@ struct UnstructuredContentView: View {
             .background(Color.orange.opacity(0.1))
             .cornerRadius(8)
             
-            GeometryReader { geometry in
-                HStack(spacing: 16) {
-                    // Original content - left half
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Original Content")
+            HStack(alignment: .top, spacing: 16) {
+                // Original content - left half
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Original Content")
+                        .font(.headline)
+                    
+                    ScrollView {
+                        MarkdownTextView(markdown: viewModel.rawContent) { checkboxContent, isChecked in
+                            // For unstructured content, we don't support checkbox toggling
+                            // as we can't reliably save changes back to the original format
+                        }
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                    }
+                    .background(Color(NSColor.textBackgroundColor))
+                    .cornerRadius(8)
+                }
+                
+                // Structured sections - right half
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Structured Sections")
                             .font(.headline)
                         
-                        ScrollView {
-                            if viewModel.rawContent.isEmpty {
-                                Text("No content loaded")
-                                    .foregroundColor(.secondary)
-                                    .italic()
-                                    .frame(maxWidth: .infinity, alignment: .center)
-                                    .padding()
-                            } else {
-                                Text(viewModel.rawContent)
-                                    .font(.system(.body, design: .monospaced))
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                                    .padding(12)
-                            }
-                        }
-                        .frame(maxHeight: .infinity)
-                        .background(Color(NSColor.textBackgroundColor))
-                        .cornerRadius(8)
-                    }
-                    .frame(width: geometry.size.width * 0.48)
-                    
-                    // Structured sections - right half
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text("Structured Sections")
-                                .font(.headline)
-                            
-                            Spacer()
-                            
-                            Button("Migrate to Structured Format") {
-                                showingMigrationAlert = true
-                            }
-                            .buttonStyle(.borderedProminent)
-                        }
+                        Spacer()
                         
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 20) {
-                                StructuredSectionEditor(
-                                    title: "Overview",
-                                    content: $viewModel.projectOverview.overview,
-                                    placeholder: "Copy and paste the overview content here"
-                                )
-                                
-                                StructuredSectionEditor(
-                                    title: "Current Status",
-                                    content: $viewModel.projectOverview.currentStatus,
-                                    placeholder: "Copy and paste the current status here"
-                                )
-                                
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("To-Do List")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                    
-                                    Text("Add todo items in the structured view after migration")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.vertical, 8)
-                                
-                                StructuredSectionEditor(
-                                    title: "Log",
-                                    content: $viewModel.projectOverview.log,
-                                    placeholder: "Copy and paste log entries here"
-                                )
-                                
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Related Projects")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                    
-                                    Text("Add related projects in the structured view after migration")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.vertical, 8)
-                                
-                                StructuredSectionEditor(
-                                    title: "Notes",
-                                    content: $viewModel.projectOverview.notes,
-                                    placeholder: "Copy and paste notes here"
-                                )
-                            }
-                            .padding(.bottom, 20)
+                        Button("Migrate to Structured Format") {
+                            showingMigrationAlert = true
                         }
+                        .buttonStyle(.borderedProminent)
                     }
-                    .frame(width: geometry.size.width * 0.48)
+                    
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 20) {
+                            StructuredSectionEditor(
+                                title: "Version History",
+                                content: $viewModel.projectOverview.versionHistory,
+                                placeholder: "e.g., v0.1 - Date - Initial creation"
+                            )
+                            
+                            StructuredSectionEditor(
+                                title: "Core Concept",
+                                content: $viewModel.projectOverview.coreConcept,
+                                placeholder: "What is this project and its primary purpose?"
+                            )
+                            
+                            StructuredSectionEditor(
+                                title: "Guiding Principles & Intentions",
+                                content: $viewModel.projectOverview.guidingPrinciples,
+                                placeholder: "Philosophy, values, and goals"
+                            )
+                            
+                            StructuredSectionEditor(
+                                title: "Key Features & Functionality",
+                                content: $viewModel.projectOverview.keyFeatures,
+                                placeholder: "List of features/components"
+                            )
+                            
+                            StructuredSectionEditor(
+                                title: "Architecture & Structure",
+                                content: $viewModel.projectOverview.architecture,
+                                placeholder: "Technical architecture / Content structure / Design framework"
+                            )
+                            
+                            StructuredSectionEditor(
+                                title: "Implementation Roadmap",
+                                content: $viewModel.projectOverview.implementationRoadmap,
+                                placeholder: "Phases and tasks with checkboxes"
+                            )
+                            
+                            StructuredSectionEditor(
+                                title: "Current Status & Progress",
+                                content: $viewModel.projectOverview.currentStatus,
+                                placeholder: "Where the project stands"
+                            )
+                            
+                            StructuredSectionEditor(
+                                title: "Next Steps",
+                                content: $viewModel.projectOverview.nextSteps,
+                                placeholder: "Immediate actionable items"
+                            )
+                            
+                            StructuredSectionEditor(
+                                title: "Challenges & Solutions",
+                                content: $viewModel.projectOverview.challenges,
+                                placeholder: "Technical, creative, or logistical challenges"
+                            )
+                            
+                            StructuredSectionEditor(
+                                title: "User/Audience Experience",
+                                content: $viewModel.projectOverview.userExperience,
+                                placeholder: "How users will interact with the project"
+                            )
+                            
+                            StructuredSectionEditor(
+                                title: "Success Metrics",
+                                content: $viewModel.projectOverview.successMetrics,
+                                placeholder: "Criteria for measuring success"
+                            )
+                            
+                            StructuredSectionEditor(
+                                title: "Research & References",
+                                content: $viewModel.projectOverview.research,
+                                placeholder: "Supporting materials, documentation"
+                            )
+                            
+                            StructuredSectionEditor(
+                                title: "Open Questions & Considerations",
+                                content: $viewModel.projectOverview.openQuestions,
+                                placeholder: "Ongoing thoughts, future possibilities"
+                            )
+                            
+                            StructuredSectionEditor(
+                                title: "Project Log",
+                                content: $viewModel.projectOverview.projectLog,
+                                placeholder: "Date-based log entries"
+                            )
+                        }
+                        .padding(.bottom, 20)
+                    }
                 }
             }
         }

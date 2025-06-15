@@ -62,6 +62,13 @@ class ProjectsManager: ObservableObject {
                       isDirectory.boolValue else {
                     return nil
                 }
+                
+                // Check if the folder is ignored
+                let folderName = url.lastPathComponent
+                if preferencesManager.isIgnored(folderName) {
+                    return nil
+                }
+                
                 return Project(folderPath: url)
             }
             
@@ -72,6 +79,10 @@ class ProjectsManager: ObservableObject {
             print("Can read: \(FileManager.default.isReadableFile(atPath: folder.path))")
             projects = []
         }
+    }
+    
+    func loadProjects() {
+        scanProjects()
     }
     
     private func sortProjects() {

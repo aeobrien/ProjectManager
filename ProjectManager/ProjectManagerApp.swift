@@ -9,9 +9,12 @@ import SwiftUI
 
 @main
 struct ProjectManagerApp: App {
+    @StateObject private var projectsManager = ProjectsManager()
+    
     var body: some Scene {
         WindowGroup {
-            ProjectsListView()
+            ProjectsOverviewView()
+                .environmentObject(projectsManager)
                 .frame(minWidth: 1200, minHeight: 700)
         }
         .commands {

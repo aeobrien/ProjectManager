@@ -14,88 +14,71 @@ class MarkdownParser {
             let contentLines = Array(lines.dropFirst())
             let content = contentLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
             
-            switch headerLine {
-            case "Overview":
-                overview.overview = content
-            case "Current Status":
+            // Handle exact matches and common variations
+            if headerLine == "Version History" {
+                overview.versionHistory = content
+            } else if headerLine == "Core Concept" {
+                overview.coreConcept = content
+            } else if headerLine == "Guiding Principles & Intentions" || headerLine == "Guiding Principles" {
+                overview.guidingPrinciples = content
+            } else if headerLine == "Key Features & Functionality" || headerLine == "Key Features" {
+                overview.keyFeatures = content
+            } else if headerLine == "Architecture & Structure" || headerLine == "Architecture" {
+                overview.architecture = content
+            } else if headerLine == "Implementation Roadmap" || headerLine == "Roadmap" {
+                overview.implementationRoadmap = content
+            } else if headerLine == "Current Status & Progress" || headerLine == "Current Status" || headerLine == "Status" {
                 overview.currentStatus = content
-            case "To-Do List":
-                overview.todoItems = parseTodoItems(from: contentLines)
-            case "Log":
-                overview.log = content
-            case "Related Projects":
-                overview.relatedProjects = parseRelatedProjects(from: content)
-            case "Notes":
-                overview.notes = content
-            default:
-                break
+            } else if headerLine == "Next Steps" {
+                overview.nextSteps = content
+            } else if headerLine.contains("Challenges") {
+                // Catches "Challenges & Solutions", "Challenges and Proposed Solutions", etc.
+                overview.challenges = content
+            } else if headerLine == "User/Audience Experience" || headerLine == "User Experience" || headerLine == "Audience Experience" {
+                overview.userExperience = content
+            } else if headerLine == "Success Metrics" || headerLine == "Metrics" {
+                overview.successMetrics = content
+            } else if headerLine == "Research & References" || headerLine == "Research" || headerLine == "References" {
+                overview.research = content
+            } else if headerLine == "Open Questions & Considerations" || headerLine == "Open Questions" || headerLine == "Questions" || headerLine == "Notes & Ideas" || headerLine == "Notes" || headerLine == "Ideas" {
+                overview.openQuestions = content
+            } else if headerLine == "Project Log" || headerLine == "Log" {
+                overview.projectLog = content
             }
         }
         
         return overview
     }
     
-    private static func parseTodoItems(from lines: [String.SubSequence]) -> [TodoItem] {
-        var items: [TodoItem] = []
-        
-        for (index, line) in lines.enumerated() {
-            let trimmedLine = line.trimmingCharacters(in: .whitespaces)
-            if trimmedLine.hasPrefix("- [ ]") {
-                let text = String(trimmedLine.dropFirst(6))
-                items.append(TodoItem(text: text, isCompleted: false, lineNumber: index))
-            } else if trimmedLine.hasPrefix("- [x]") || trimmedLine.hasPrefix("- [X]") {
-                let text = String(trimmedLine.dropFirst(6))
-                items.append(TodoItem(text: text, isCompleted: true, lineNumber: index))
-            }
-        }
-        
-        return items
-    }
-    
-    private static func parseRelatedProjects(from content: String) -> [String] {
-        let lines = content.split(separator: "\n")
-        return lines.compactMap { line in
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("- ") {
-                return String(trimmed.dropFirst(2))
-            }
-            return nil
-        }
-    }
-    
-    static func updateTodoSection(in content: String, with todoItems: [TodoItem]) -> String {
-        var lines = content.components(separatedBy: "\n")
-        
-        guard let todoSectionStart = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "## To-Do List" }) else {
-            return content
-        }
-        
-        var todoSectionEnd = todoSectionStart + 1
-        while todoSectionEnd < lines.count {
-            let line = lines[todoSectionEnd].trimmingCharacters(in: .whitespaces)
-            if line.hasPrefix("##") && !line.hasPrefix("###") {
-                break
-            }
-            todoSectionEnd += 1
-        }
-        
-        let newTodoLines = todoItems.map { $0.markdownLine }
-        let todoSection = ["## To-Do List"] + (newTodoLines.isEmpty ? [""] : newTodoLines)
-        
-        lines.removeSubrange((todoSectionStart..<todoSectionEnd))
-        lines.insert(contentsOf: todoSection, at: todoSectionStart)
-        
-        return lines.joined(separator: "\n")
-    }
     
     static func updateSection(in content: String, sectionName: String, newContent: String) -> String {
         var lines = content.components(separatedBy: "\n")
         
-        guard let sectionStart = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "## \(sectionName)" }) else {
+        // Try to find exact match first
+        var sectionStart = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "## \(sectionName)" })
+        
+        // If not found, try common alternatives
+        if sectionStart == nil {
+            let alternatives: [String: [String]] = [
+                "Current Status & Progress": ["Current Status", "Status"],
+                "Next Steps": ["Next Steps"]
+            ]
+            
+            if let alts = alternatives[sectionName] {
+                for alt in alts {
+                    if let index = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "## \(alt)" }) {
+                        sectionStart = index
+                        break
+                    }
+                }
+            }
+        }
+        
+        guard let sectionStartIndex = sectionStart else {
             return content
         }
         
-        var sectionEnd = sectionStart + 1
+        var sectionEnd = sectionStartIndex + 1
         while sectionEnd < lines.count {
             let line = lines[sectionEnd].trimmingCharacters(in: .whitespaces)
             if line.hasPrefix("##") && !line.hasPrefix("###") {
@@ -107,8 +90,8 @@ class MarkdownParser {
         let newContentLines = newContent.isEmpty ? [""] : newContent.components(separatedBy: "\n")
         let section = ["## \(sectionName)"] + newContentLines
         
-        lines.removeSubrange((sectionStart..<sectionEnd))
-        lines.insert(contentsOf: section, at: sectionStart)
+        lines.removeSubrange((sectionStartIndex..<sectionEnd))
+        lines.insert(contentsOf: section, at: sectionStartIndex)
         
         return lines.joined(separator: "\n")
     }

@@ -7,7 +7,7 @@ class OverviewEditorViewModel: ObservableObject {
     @Published var rawContent: String = ""
     @Published var hasUnstructuredContent = false
     
-    private let project: Project
+    let project: Project
     private var originalContent: String = ""
     private let fileMonitor = FileMonitor()
     private var cancellables = Set<AnyCancellable>()
@@ -56,15 +56,10 @@ class OverviewEditorViewModel: ObservableObject {
             originalContent = content
             rawContent = content
             
-            print("Loaded content (\(content.count) characters)")
-            print("First 200 chars: \(String(content.prefix(200)))")
-            
             // Check if file has the expected structure
             let hasExpectedStructure = ProjectOverview.sectionHeaders.allSatisfy { header in
                 content.contains(header)
             }
-            
-            print("Has expected structure: \(hasExpectedStructure)")
             
             if hasExpectedStructure {
                 projectOverview = MarkdownParser.parseProjectOverview(from: content)
@@ -72,7 +67,7 @@ class OverviewEditorViewModel: ObservableObject {
             } else {
                 // File exists but doesn't have the expected structure
                 hasUnstructuredContent = true
-                projectOverview = ProjectOverview() // Empty structured content
+                projectOverview = MarkdownParser.parseProjectOverview(from: content)
             }
             
             hasChanges = false
@@ -97,15 +92,20 @@ class OverviewEditorViewModel: ObservableObject {
     func saveOverview() {
         var content = originalContent
         
-        content = MarkdownParser.updateSection(in: content, sectionName: "Overview", newContent: projectOverview.overview)
-        content = MarkdownParser.updateSection(in: content, sectionName: "Current Status", newContent: projectOverview.currentStatus)
-        content = MarkdownParser.updateTodoSection(in: content, with: projectOverview.todoItems)
-        content = MarkdownParser.updateSection(in: content, sectionName: "Log", newContent: projectOverview.log)
-        
-        let relatedProjectsContent = projectOverview.relatedProjects.map { "- \($0)" }.joined(separator: "\n")
-        content = MarkdownParser.updateSection(in: content, sectionName: "Related Projects", newContent: relatedProjectsContent)
-        
-        content = MarkdownParser.updateSection(in: content, sectionName: "Notes", newContent: projectOverview.notes)
+        content = MarkdownParser.updateSection(in: content, sectionName: "Version History", newContent: projectOverview.versionHistory)
+        content = MarkdownParser.updateSection(in: content, sectionName: "Core Concept", newContent: projectOverview.coreConcept)
+        content = MarkdownParser.updateSection(in: content, sectionName: "Guiding Principles & Intentions", newContent: projectOverview.guidingPrinciples)
+        content = MarkdownParser.updateSection(in: content, sectionName: "Key Features & Functionality", newContent: projectOverview.keyFeatures)
+        content = MarkdownParser.updateSection(in: content, sectionName: "Architecture & Structure", newContent: projectOverview.architecture)
+        content = MarkdownParser.updateSection(in: content, sectionName: "Implementation Roadmap", newContent: projectOverview.implementationRoadmap)
+        content = MarkdownParser.updateSection(in: content, sectionName: "Current Status & Progress", newContent: projectOverview.currentStatus)
+        content = MarkdownParser.updateSection(in: content, sectionName: "Next Steps", newContent: projectOverview.nextSteps)
+        content = MarkdownParser.updateSection(in: content, sectionName: "Challenges & Solutions", newContent: projectOverview.challenges)
+        content = MarkdownParser.updateSection(in: content, sectionName: "User/Audience Experience", newContent: projectOverview.userExperience)
+        content = MarkdownParser.updateSection(in: content, sectionName: "Success Metrics", newContent: projectOverview.successMetrics)
+        content = MarkdownParser.updateSection(in: content, sectionName: "Research & References", newContent: projectOverview.research)
+        content = MarkdownParser.updateSection(in: content, sectionName: "Open Questions & Considerations", newContent: projectOverview.openQuestions)
+        content = MarkdownParser.updateSection(in: content, sectionName: "Project Log", newContent: projectOverview.projectLog)
         
         do {
             lastSaveTime = Date()
@@ -128,36 +128,84 @@ class OverviewEditorViewModel: ObservableObject {
             // Create structured content
             var structuredContent = "# \(project.name)\n\n"
             
-            for header in ProjectOverview.sectionHeaders {
-                structuredContent += "\(header)\n"
-                
-                switch header {
-                case "## Overview":
-                    structuredContent += projectOverview.overview.isEmpty ? "[Short description]" : projectOverview.overview
-                case "## Current Status":
-                    structuredContent += projectOverview.currentStatus.isEmpty ? "[Where the project stands now]" : projectOverview.currentStatus
-                case "## To-Do List":
-                    if projectOverview.todoItems.isEmpty {
-                        structuredContent += "- [ ] Example task"
-                    } else {
-                        structuredContent += projectOverview.todoItems.map { $0.markdownLine }.joined(separator: "\n")
+            // Add all sections with their content
+            structuredContent += "## Version History\n"
+            if projectOverview.versionHistory.isEmpty {
+                structuredContent += "- v0.1 - \(Date().formatted(date: .abbreviated, time: .omitted)) - Migrated to structured format"
+            } else {
+                structuredContent += projectOverview.versionHistory
+            }
+            structuredContent += "\n\n"
+            
+            // Add all sections with empty content if not provided
+            structuredContent += "## Core Concept\n"
+            structuredContent += projectOverview.coreConcept
+            structuredContent += "\n\n"
+            
+            structuredContent += "## Guiding Principles & Intentions\n"
+            structuredContent += projectOverview.guidingPrinciples
+            structuredContent += "\n\n"
+            
+            structuredContent += "## Key Features & Functionality\n"
+            structuredContent += projectOverview.keyFeatures
+            structuredContent += "\n\n"
+            
+            structuredContent += "## Architecture & Structure\n"
+            structuredContent += projectOverview.architecture
+            structuredContent += "\n\n"
+            
+            structuredContent += "## Implementation Roadmap\n"
+            structuredContent += projectOverview.implementationRoadmap
+            structuredContent += "\n\n"
+            
+            structuredContent += "## Current Status & Progress\n"
+            structuredContent += projectOverview.currentStatus
+            structuredContent += "\n\n"
+            
+            structuredContent += "## Next Steps\n"
+            if !projectOverview.nextSteps.isEmpty {
+                // Convert lines to checkboxes if not already
+                let lines = projectOverview.nextSteps.split(separator: "\n")
+                let checkboxLines = lines.map { line in
+                    let trimmed = line.trimmingCharacters(in: .whitespaces)
+                    if trimmed.hasPrefix("- [ ]") || trimmed.hasPrefix("- [x]") || trimmed.hasPrefix("- [X]") {
+                        return String(line)
+                    } else if trimmed.hasPrefix("- ") {
+                        return "- [ ] " + trimmed.dropFirst(2)
+                    } else if !trimmed.isEmpty {
+                        return "- [ ] " + trimmed
                     }
-                case "## Log":
-                    if projectOverview.log.isEmpty {
-                        structuredContent += "- \(Date().formatted(date: .numeric, time: .omitted)): Migrated to structured format"
-                    } else {
-                        structuredContent += projectOverview.log
-                    }
-                case "## Related Projects":
-                    if !projectOverview.relatedProjects.isEmpty {
-                        structuredContent += projectOverview.relatedProjects.map { "- \($0)" }.joined(separator: "\n")
-                    }
-                case "## Notes":
-                    structuredContent += projectOverview.notes.isEmpty ? "[Any extra context or ideas]" : projectOverview.notes
-                default:
-                    break
+                    return String(line)
                 }
-                structuredContent += "\n\n"
+                structuredContent += checkboxLines.joined(separator: "\n")
+            }
+            structuredContent += "\n\n"
+            
+            structuredContent += "## Challenges & Solutions\n"
+            structuredContent += projectOverview.challenges
+            structuredContent += "\n\n"
+            
+            structuredContent += "## User/Audience Experience\n"
+            structuredContent += projectOverview.userExperience
+            structuredContent += "\n\n"
+            
+            structuredContent += "## Success Metrics\n"
+            structuredContent += projectOverview.successMetrics
+            structuredContent += "\n\n"
+            
+            structuredContent += "## Research & References\n"
+            structuredContent += projectOverview.research
+            structuredContent += "\n\n"
+            
+            structuredContent += "## Open Questions & Considerations\n"
+            structuredContent += projectOverview.openQuestions
+            structuredContent += "\n\n"
+            
+            structuredContent += "## Project Log\n"
+            if projectOverview.projectLog.isEmpty {
+                structuredContent += "### \(Date().formatted(date: .abbreviated, time: .omitted))\nMigrated to structured format"
+            } else {
+                structuredContent += projectOverview.projectLog
             }
             
             // Save the structured content
@@ -175,32 +223,4 @@ class OverviewEditorViewModel: ObservableObject {
         }
     }
     
-    func addTodoItem(_ text: String) {
-        let newItem = TodoItem(text: text, isCompleted: false)
-        projectOverview.todoItems.append(newItem)
-        hasChanges = true
-        saveOverview()
-    }
-    
-    func toggleTodoItem(_ item: TodoItem) {
-        if let index = projectOverview.todoItems.firstIndex(where: { $0.id == item.id }) {
-            projectOverview.todoItems[index].isCompleted.toggle()
-            hasChanges = true
-            saveOverview()
-        }
-    }
-    
-    func deleteTodoItem(_ item: TodoItem) {
-        projectOverview.todoItems.removeAll { $0.id == item.id }
-        hasChanges = true
-        saveOverview()
-    }
-    
-    func updateTodoText(_ item: TodoItem, newText: String) {
-        if let index = projectOverview.todoItems.firstIndex(where: { $0.id == item.id }) {
-            projectOverview.todoItems[index].text = newText
-            hasChanges = true
-            saveOverview()
-        }
-    }
 }
