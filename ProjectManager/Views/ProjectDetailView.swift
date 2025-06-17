@@ -64,6 +64,8 @@ struct ProjectDetailView: View {
                                 SidebarItem(id: "research", icon: "book", title: "Research")
                                 SidebarItem(id: "notes", icon: "questionmark.circle", title: "Open Questions")
                                 SidebarItem(id: "log", icon: "calendar", title: "Project Log")
+                                SidebarItem(id: "external", icon: "externaldrive", title: "External Files")
+                                SidebarItem(id: "repos", icon: "folder.badge.gearshape", title: "Repositories")
                             }
                         }
                         
@@ -190,6 +192,34 @@ struct ProjectDetailView: View {
                                         onSave: viewModel.saveOverview,
                                         isMarkdown: true
                                     )
+                                case "external":
+                                    OverviewSectionView(
+                                        title: "External Files",
+                                        content: $viewModel.projectOverview.externalFiles,
+                                        onSave: viewModel.saveOverview
+                                    )
+                                case "repos":
+                                    VStack(alignment: .leading, spacing: 12) {
+                                        OverviewSectionView(
+                                            title: "Repositories",
+                                            content: $viewModel.projectOverview.repositories,
+                                            onSave: viewModel.saveOverview,
+                                            isMarkdown: true
+                                        )
+                                        
+                                        HStack {
+                                            Button("Sync GitHub Commits") {
+                                                viewModel.updateProjectLogWithGitHubCommits()
+                                            }
+                                            .buttonStyle(.borderedProminent)
+                                            
+                                            Spacer()
+                                            
+                                            Text("Fetches recent commits and adds them to the project log")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
                                 default:
                                     EmptyView()
                                 }
@@ -243,7 +273,7 @@ struct OverviewSectionView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text(title)
-                    .font(.title2)
+                    .font(.title)
                     .fontWeight(.semibold)
                 
                 Spacer()

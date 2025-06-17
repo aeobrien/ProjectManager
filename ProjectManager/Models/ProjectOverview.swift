@@ -15,6 +15,8 @@ struct ProjectOverview {
     var research: String = ""
     var openQuestions: String = ""
     var projectLog: String = ""
+    var externalFiles: String = ""
+    var repositories: String = ""
     
     static let sectionHeaders = [
         "## Version History",
@@ -30,7 +32,9 @@ struct ProjectOverview {
         "## Success Metrics",
         "## Research & References",
         "## Open Questions & Considerations",
-        "## Project Log"
+        "## Project Log",
+        "## External Files",
+        "## Repositories"
     ]
     
     static func createTemplate(projectName: String) -> String {
@@ -89,6 +93,16 @@ struct ProjectOverview {
         ## Project Log
         ### \(date)
         Project created
+        
+        ## External Files
+        [Any files related to the project outside of the Obsidian folder and their locations]
+        
+        ## Repositories
+        ### Local Repositories
+        [Local repository paths and descriptions]
+        
+        ### GitHub Repositories
+        [GitHub repository URLs and descriptions]
         """
     }
 }

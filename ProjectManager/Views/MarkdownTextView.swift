@@ -224,13 +224,13 @@ struct MarkdownTextView: View {
     
     private func headingFont(for level: Int) -> Font {
         switch level {
-        case 1: return .largeTitle
-        case 2: return .title
-        case 3: return .title2
-        case 4: return .title3
-        case 5: return .headline
-        case 6: return .subheadline
-        default: return .headline
+        case 1: return .system(size: 24, weight: .regular, design: .default)  // H1 - Largest
+        case 2: return .system(size: 20, weight: .regular, design: .default)  // H2
+        case 3: return .system(size: 18, weight: .regular, design: .default)  // H3
+        case 4: return .system(size: 16, weight: .regular, design: .default)  // H4
+        case 5: return .system(size: 15, weight: .regular, design: .default)  // H5
+        case 6: return .system(size: 14, weight: .regular, design: .default)  // H6 - Smallest
+        default: return .system(size: 16, weight: .regular, design: .default)
         }
     }
     

@@ -89,8 +89,38 @@ class OverviewEditorViewModel: ObservableObject {
         }
     }
     
+    private func formatNextSteps(_ nextSteps: String) -> String {
+        let lines = nextSteps.split(separator: "\n", omittingEmptySubsequences: false)
+        var formattedLines: [String] = []
+        
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            
+            // Skip empty lines
+            if trimmed.isEmpty {
+                continue
+            }
+            
+            // Check if line already has checkbox formatting
+            if trimmed.hasPrefix("- [ ]") || trimmed.hasPrefix("- [x]") || trimmed.hasPrefix("- [X]") {
+                formattedLines.append(String(line))
+            } else if trimmed.hasPrefix("- ") {
+                // Line starts with dash but no checkbox, add checkbox
+                formattedLines.append("- [ ] " + trimmed.dropFirst(2))
+            } else {
+                // Plain text, convert to checkbox
+                formattedLines.append("- [ ] " + trimmed)
+            }
+        }
+        
+        return formattedLines.joined(separator: "\n")
+    }
+    
     func saveOverview() {
         var content = originalContent
+        
+        // Format next steps before saving
+        projectOverview.nextSteps = formatNextSteps(projectOverview.nextSteps)
         
         content = MarkdownParser.updateSection(in: content, sectionName: "Version History", newContent: projectOverview.versionHistory)
         content = MarkdownParser.updateSection(in: content, sectionName: "Core Concept", newContent: projectOverview.coreConcept)
@@ -106,6 +136,8 @@ class OverviewEditorViewModel: ObservableObject {
         content = MarkdownParser.updateSection(in: content, sectionName: "Research & References", newContent: projectOverview.research)
         content = MarkdownParser.updateSection(in: content, sectionName: "Open Questions & Considerations", newContent: projectOverview.openQuestions)
         content = MarkdownParser.updateSection(in: content, sectionName: "Project Log", newContent: projectOverview.projectLog)
+        content = MarkdownParser.updateSection(in: content, sectionName: "External Files", newContent: projectOverview.externalFiles)
+        content = MarkdownParser.updateSection(in: content, sectionName: "Repositories", newContent: projectOverview.repositories)
         
         do {
             lastSaveTime = Date()
@@ -114,6 +146,56 @@ class OverviewEditorViewModel: ObservableObject {
             hasChanges = false
         } catch {
             print("Error saving overview: \(error)")
+        }
+    }
+    
+    func updateProjectLogWithGitHubCommits() {
+        let repositories = GitHubService.shared.extractRepositoriesFromText(projectOverview.repositories)
+        
+        guard !repositories.isEmpty else {
+            print("No GitHub repositories found in project")
+            return
+        }
+        
+        print("Found \(repositories.count) GitHub repositories")
+        
+        GitHubService.shared.fetchRecentCommits(for: repositories) { [weak self] commits in
+            guard let self = self, !commits.isEmpty else {
+                print("No commits found")
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.insertCommitsIntoLog(commits, repositories: repositories)
+            }
+        }
+    }
+    
+    private func insertCommitsIntoLog(_ commits: [GitHubCommit], repositories: [GitHubRepository]) {
+        var logEntries: [String] = []
+        
+        for commit in commits.prefix(10) { // Limit to 10 most recent commits
+            // Find which repository this commit belongs to by matching commit to repo
+            let repoName = repositories.first?.repo ?? "Unknown"
+            let formattedCommit = GitHubService.shared.formatCommitForLog(commit, repositoryName: repoName)
+            if !formattedCommit.isEmpty {
+                logEntries.append(formattedCommit)
+            }
+        }
+        
+        if !logEntries.isEmpty {
+            let currentLog = projectOverview.projectLog
+            
+            // Insert commits as individual log entries at the beginning
+            if currentLog.isEmpty {
+                projectOverview.projectLog = logEntries.joined(separator: "\n\n")
+            } else {
+                // Add new commits at the beginning of the log
+                projectOverview.projectLog = logEntries.joined(separator: "\n\n") + "\n\n" + currentLog
+            }
+            
+            saveOverview()
+            print("Updated project log with \(logEntries.count) GitHub commits")
         }
     }
     
@@ -207,6 +289,14 @@ class OverviewEditorViewModel: ObservableObject {
             } else {
                 structuredContent += projectOverview.projectLog
             }
+            structuredContent += "\n\n"
+            
+            structuredContent += "## External Files\n"
+            structuredContent += projectOverview.externalFiles
+            structuredContent += "\n\n"
+            
+            structuredContent += "## Repositories\n"
+            structuredContent += projectOverview.repositories
             
             // Save the structured content
             try structuredContent.write(to: project.overviewPath, atomically: true, encoding: .utf8)

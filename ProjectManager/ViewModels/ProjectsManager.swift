@@ -73,11 +73,65 @@ class ProjectsManager: ObservableObject {
             }
             
             sortProjects()
+            
+            // Check for first run and migrate projects if needed
+            checkAndMigrateProjects()
         } catch {
             print("Error scanning projects: \(error)")
             print("Folder path: \(folder.path)")
             print("Can read: \(FileManager.default.isReadableFile(atPath: folder.path))")
             projects = []
+        }
+    }
+    
+    private func checkAndMigrateProjects() {
+        // Check if migration has already been done
+        let migrationKey = "project_migration_v1_completed"
+        if UserDefaults.standard.bool(forKey: migrationKey) {
+            return
+        }
+        
+        // Migrate all projects
+        for project in projects {
+            if project.hasOverview {
+                migrateProjectOverview(project)
+            }
+        }
+        
+        // Mark migration as completed
+        UserDefaults.standard.set(true, forKey: migrationKey)
+        print("Project migration completed for \(projects.count) projects")
+    }
+    
+    private func migrateProjectOverview(_ project: Project) {
+        do {
+            let content = try String(contentsOf: project.overviewPath, encoding: .utf8)
+            
+            // Check if the new fields already exist
+            if content.contains("## External Files") && content.contains("## Repositories") {
+                return // Already migrated
+            }
+            
+            // Add the new sections to the end
+            let newSections = """
+            
+            ## External Files
+            [Any files related to the project outside of the Obsidian folder and their locations]
+            
+            ## Repositories
+            ### Local Repositories
+            [Local repository paths and descriptions]
+            
+            ### GitHub Repositories
+            [GitHub repository URLs and descriptions]
+            """
+            
+            let updatedContent = content + newSections
+            try updatedContent.write(to: project.overviewPath, atomically: true, encoding: .utf8)
+            
+            print("Migrated project: \(project.name)")
+        } catch {
+            print("Failed to migrate project \(project.name): \(error)")
         }
     }
     
@@ -121,10 +175,68 @@ class ProjectsManager: ObservableObject {
         try FileManager.default.createDirectory(at: projectFolder, withIntermediateDirectories: true)
         
         let overviewFile = projectFolder.appendingPathComponent("\(name).md")
-        let content = ProjectOverview.createTemplate(projectName: name)
+        
+        // Create content using the provided overview data
+        let content = createMarkdownContent(projectName: name, overview: overview)
         try content.write(to: overviewFile, atomically: true, encoding: .utf8)
         
         scanProjects()
+    }
+    
+    private func createMarkdownContent(projectName: String, overview: ProjectOverview) -> String {
+        let date = Date().formatted(date: .abbreviated, time: .omitted)
+        return """
+        # \(projectName)
+        
+        ## Version History
+        - v0.1 - \(date) - Initial project creation
+        
+        ## Core Concept
+        \(overview.coreConcept)
+        
+        ## Guiding Principles & Intentions
+        \(overview.guidingPrinciples)
+        
+        ## Key Features & Functionality
+        \(overview.keyFeatures)
+        
+        ## Architecture & Structure
+        \(overview.architecture)
+        
+        ## Implementation Roadmap
+        \(overview.implementationRoadmap)
+        
+        ## Current Status & Progress
+        \(overview.currentStatus)
+        
+        ## Next Steps
+        \(overview.nextSteps)
+        
+        ## Challenges & Solutions
+        \(overview.challenges)
+        
+        ## User/Audience Experience
+        \(overview.userExperience)
+        
+        ## Success Metrics
+        \(overview.successMetrics)
+        
+        ## Research & References
+        \(overview.research)
+        
+        ## Open Questions & Considerations
+        \(overview.openQuestions)
+        
+        ## Project Log
+        ### \(date)
+        Project created
+        
+        ## External Files
+        \(overview.externalFiles)
+        
+        ## Repositories
+        \(overview.repositories)
+        """
     }
     
     func renameProject(_ project: Project, to newName: String) throws {

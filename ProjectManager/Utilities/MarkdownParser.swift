@@ -44,6 +44,10 @@ class MarkdownParser {
                 overview.openQuestions = content
             } else if headerLine == "Project Log" || headerLine == "Log" {
                 overview.projectLog = content
+            } else if headerLine == "External Files" {
+                overview.externalFiles = content
+            } else if headerLine == "Repositories" {
+                overview.repositories = content
             }
         }
         

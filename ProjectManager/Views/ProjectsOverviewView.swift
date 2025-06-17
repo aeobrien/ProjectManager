@@ -4,6 +4,8 @@ struct ProjectsOverviewView: View {
     @EnvironmentObject var projectsManager: ProjectsManager
     @State private var searchText = ""
     @State private var showOnlyMissingFields = false
+    @State private var selectedSearchFields: Set<SearchField> = [.name, .coreConcept]
+    @State private var showSearchOptions = false
     @State private var editingProjects: Set<UUID> = []
     @State private var showingNewProjectForm = false
     @State private var showingProjectsList = false
@@ -22,7 +24,9 @@ struct ProjectsOverviewView: View {
         if searchText.isEmpty {
             return projects
         } else {
-            return projects.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+            return projects.filter { project in
+                searchInProject(project, searchText: searchText, fields: selectedSearchFields)
+            }
         }
     }
     
@@ -59,15 +63,28 @@ struct ProjectsOverviewView: View {
                 }
                 
                 // Search bar
-                HStack {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(.secondary)
-                    TextField("Search projects...", text: $searchText)
-                        .textFieldStyle(.plain)
+                VStack(spacing: 8) {
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.secondary)
+                        TextField("Search projects...", text: $searchText)
+                            .textFieldStyle(.plain)
+                        
+                        Button(action: { showSearchOptions.toggle() }) {
+                            Image(systemName: "line.3.horizontal.decrease.circle")
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Search options")
+                    }
+                    .padding(8)
+                    .background(Color(NSColor.controlBackgroundColor))
+                    .cornerRadius(8)
+                    
+                    if showSearchOptions {
+                        SearchFieldSelector(selectedFields: $selectedSearchFields)
+                    }
                 }
-                .padding(8)
-                .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(8)
             }
             .padding()
             
@@ -246,6 +263,57 @@ struct ProjectsOverviewView: View {
         
         return entries // Keep original order - first entry is most recent
     }
+    
+    private func searchInProject(_ project: Project, searchText: String, fields: Set<SearchField>) -> Bool {
+        let vm = OverviewEditorViewModel(project: project)
+        vm.loadOverview()
+        
+        for field in fields {
+            let content: String
+            switch field {
+            case .name:
+                content = project.name
+            case .coreConcept:
+                content = vm.projectOverview.coreConcept
+            case .versionHistory:
+                content = vm.projectOverview.versionHistory
+            case .guidingPrinciples:
+                content = vm.projectOverview.guidingPrinciples
+            case .keyFeatures:
+                content = vm.projectOverview.keyFeatures
+            case .architecture:
+                content = vm.projectOverview.architecture
+            case .implementationRoadmap:
+                content = vm.projectOverview.implementationRoadmap
+            case .currentStatus:
+                content = vm.projectOverview.currentStatus
+            case .nextSteps:
+                content = vm.projectOverview.nextSteps
+            case .challenges:
+                content = vm.projectOverview.challenges
+            case .userExperience:
+                content = vm.projectOverview.userExperience
+            case .successMetrics:
+                content = vm.projectOverview.successMetrics
+            case .research:
+                content = vm.projectOverview.research
+            case .openQuestions:
+                content = vm.projectOverview.openQuestions
+            case .projectLog:
+                content = vm.projectOverview.projectLog
+            case .externalFiles:
+                content = vm.projectOverview.externalFiles
+            case .repositories:
+                content = vm.projectOverview.repositories
+            }
+            
+            if content.localizedCaseInsensitiveContains(searchText) {
+                return true
+            }
+        }
+        
+        return false
+    }
 }
 
 struct ProjectOverviewRow: View {
@@ -387,10 +455,11 @@ struct ProjectOverviewRow: View {
                                 .foregroundColor(.orange)
                                 .italic()
                         } else {
+                            let filteredNextSteps = filterOutCompletedTasks(viewModel.projectOverview.nextSteps)
                             MarkdownTextView(
-                                markdown: viewModel.projectOverview.nextSteps,
+                                markdown: filteredNextSteps,
                                 onCheckboxToggle: { lineIndex, isChecked in
-                                    handleCheckboxToggle(lineIndex: lineIndex, isChecked: isChecked)
+                                    handleCheckboxToggleWithFiltered(lineIndex: lineIndex, isChecked: isChecked, originalText: viewModel.projectOverview.nextSteps)
                                 }
                             )
                             .fixedSize(horizontal: false, vertical: true)
@@ -519,6 +588,42 @@ struct ProjectOverviewRow: View {
     private func saveChanges() {
         viewModel.projectOverview.currentStatus = editedStatus
         viewModel.projectOverview.nextSteps = editedNextSteps
+        viewModel.saveOverview()
+    }
+    
+    private func filterOutCompletedTasks(_ nextSteps: String) -> String {
+        let lines = nextSteps.split(separator: "\n", omittingEmptySubsequences: false)
+        let filteredLines = lines.filter { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            // Keep non-checkbox lines and uncompleted checkbox lines
+            return !trimmed.hasPrefix("- [x]") && !trimmed.hasPrefix("- [X]")
+        }
+        return filteredLines.joined(separator: "\n")
+    }
+    
+    private func handleCheckboxToggleWithFiltered(lineIndex: Int, isChecked: Bool, originalText: String) {
+        // Get the filtered lines to find which task was toggled
+        let filteredLines = filterOutCompletedTasks(originalText).split(separator: "\n", omittingEmptySubsequences: false)
+        guard lineIndex < filteredLines.count else { return }
+        
+        let toggledLine = String(filteredLines[lineIndex])
+        
+        // Find this line in the original text and toggle it
+        var originalLines = originalText.split(separator: "\n", omittingEmptySubsequences: false)
+        for (index, line) in originalLines.enumerated() {
+            if line == toggledLine {
+                let newLine: String
+                if line.contains("- [ ]") {
+                    newLine = String(line).replacingOccurrences(of: "- [ ]", with: "- [x]")
+                } else {
+                    newLine = String(line)
+                }
+                originalLines[index] = Substring(newLine)
+                break
+            }
+        }
+        
+        viewModel.projectOverview.nextSteps = originalLines.joined(separator: "\n")
         viewModel.saveOverview()
     }
     
@@ -712,5 +817,78 @@ struct EditNextStepsDialog: View {
         }
         .padding()
         .frame(width: 500, height: 250)
+    }
+}
+
+enum SearchField: String, CaseIterable, Identifiable {
+    case name = "Project Name"
+    case coreConcept = "Core Concept"
+    case versionHistory = "Version History"
+    case guidingPrinciples = "Guiding Principles"
+    case keyFeatures = "Key Features"
+    case architecture = "Architecture"
+    case implementationRoadmap = "Implementation Roadmap"
+    case currentStatus = "Current Status"
+    case nextSteps = "Next Steps"
+    case challenges = "Challenges"
+    case userExperience = "User Experience"
+    case successMetrics = "Success Metrics"
+    case research = "Research"
+    case openQuestions = "Open Questions"
+    case projectLog = "Project Log"
+    case externalFiles = "External Files"
+    case repositories = "Repositories"
+    
+    var id: String { rawValue }
+}
+
+struct SearchFieldSelector: View {
+    @Binding var selectedFields: Set<SearchField>
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Search in:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Button("All") {
+                    selectedFields = Set(SearchField.allCases)
+                }
+                .font(.caption)
+                
+                Button("None") {
+                    selectedFields.removeAll()
+                }
+                .font(.caption)
+                
+                Button("Default") {
+                    selectedFields = [.name, .coreConcept]
+                }
+                .font(.caption)
+            }
+            
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .leading), count: 3), spacing: 4) {
+                ForEach(SearchField.allCases) { field in
+                    Toggle(field.rawValue, isOn: Binding(
+                        get: { selectedFields.contains(field) },
+                        set: { isSelected in
+                            if isSelected {
+                                selectedFields.insert(field)
+                            } else {
+                                selectedFields.remove(field)
+                            }
+                        }
+                    ))
+                    .toggleStyle(.checkbox)
+                    .font(.caption)
+                }
+            }
+        }
+        .padding(12)
+        .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+        .cornerRadius(8)
     }
 }

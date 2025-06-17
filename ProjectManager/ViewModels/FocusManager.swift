@@ -8,8 +8,11 @@ class FocusManager: ObservableObject {
     @Published var showingProjectSelector = false
     @Published var projectNeedingReplacement: FocusedProject?
     
-    private let maxActiveProjects = 8
+    private let maxActiveProjects = 5
     private let minActiveProjects = 3
+    
+    var maxActive: Int { maxActiveProjects }
+    var minActive: Int { minActiveProjects }
     private var cancellables = Set<AnyCancellable>()
     
     init() {
@@ -52,7 +55,11 @@ class FocusManager: ObservableObject {
             return
         }
         
-        focusedProjects[index].activate()
+        // Create a copy to trigger @Published
+        var updatedProjects = focusedProjects
+        updatedProjects[index].activate()
+        focusedProjects = updatedProjects
+        
         refreshTasksForProject(getProject(for: focusedProjects[index]))
         saveData()
     }
@@ -60,7 +67,10 @@ class FocusManager: ObservableObject {
     func deactivateProject(_ project: FocusedProject) {
         guard let index = focusedProjects.firstIndex(where: { $0.id == project.id }) else { return }
         
-        focusedProjects[index].deactivate()
+        // Create a copy to trigger @Published
+        var updatedProjects = focusedProjects
+        updatedProjects[index].deactivate()
+        focusedProjects = updatedProjects
         
         // Remove tasks for this project from the task list
         allTasks.removeAll { $0.projectId == project.projectId }
@@ -112,11 +122,26 @@ class FocusManager: ObservableObject {
     }
     
     private func refreshTasksFromActiveProjects() {
+        // Store existing task statuses before refreshing
+        let existingTaskStatuses = allTasks.reduce(into: [String: (TaskStatus, UUID)]()) { result, task in
+            result[task.displayText] = (task.status, task.projectId)
+        }
+        
         allTasks.removeAll()
         
         for focusedProject in activeProjects {
             if let project = getProject(for: focusedProject) {
-                let tasks = extractTasksFromProject(project)
+                var tasks = extractTasksFromProject(project)
+                
+                // Restore in-progress status for matching tasks
+                for i in 0..<tasks.count {
+                    if let existingData = existingTaskStatuses[tasks[i].displayText],
+                       existingData.1 == tasks[i].projectId,
+                       existingData.0 == .inProgress {
+                        tasks[i].status = .inProgress
+                    }
+                }
+                
                 allTasks.append(contentsOf: tasks)
             }
         }
@@ -125,11 +150,26 @@ class FocusManager: ObservableObject {
     func refreshTasksForProject(_ project: Project?) {
         guard let project = project else { return }
         
+        // Store existing tasks with their statuses before removing
+        let existingTaskStatuses = allTasks.filter { $0.projectId == project.id }
+            .reduce(into: [String: TaskStatus]()) { result, task in
+                result[task.displayText] = task.status
+            }
+        
         // Remove existing tasks for this project
         allTasks.removeAll { $0.projectId == project.id }
         
         // Add updated tasks
-        let tasks = extractTasksFromProject(project)
+        var tasks = extractTasksFromProject(project)
+        
+        // Restore in-progress status for matching tasks
+        for i in 0..<tasks.count {
+            if let existingStatus = existingTaskStatuses[tasks[i].displayText],
+               existingStatus == .inProgress {
+                tasks[i].status = .inProgress
+            }
+        }
+        
         allTasks.append(contentsOf: tasks)
         
         saveData()
@@ -138,11 +178,19 @@ class FocusManager: ObservableObject {
     // MARK: - Computed Properties
     
     var activeProjects: [FocusedProject] {
-        focusedProjects.filter { $0.status == .active }.sorted { $0.priority > $1.priority }
+        focusedProjects.filter { $0.status == .active }.sorted { 
+            let name1 = getProject(for: $0)?.name ?? ""
+            let name2 = getProject(for: $1)?.name ?? ""
+            return name1.localizedCaseInsensitiveCompare(name2) == .orderedAscending
+        }
     }
     
     var inactiveProjects: [FocusedProject] {
-        focusedProjects.filter { $0.status == .inactive }.sorted { $0.priority > $1.priority }
+        focusedProjects.filter { $0.status == .inactive }.sorted { 
+            let name1 = getProject(for: $0)?.name ?? ""
+            let name2 = getProject(for: $1)?.name ?? ""
+            return name1.localizedCaseInsensitiveCompare(name2) == .orderedAscending
+        }
     }
     
     var todoTasks: [FocusTask] {
@@ -217,9 +265,19 @@ class FocusManager: ObservableObject {
             if trimmed.hasPrefix("- [") {
                 let isCompleted = trimmed.hasPrefix("- [x]") || trimmed.hasPrefix("- [X]")
                 let text = String(trimmed)
-                let status: TaskStatus = isCompleted ? .completed : .todo
-                let task = FocusTask(text: text, status: status, projectId: project.id)
-                tasks.append(task)
+                
+                // Check if we already have this task in our allTasks array to preserve its status
+                if let existingTask = allTasks.first(where: { 
+                    $0.projectId == project.id && $0.displayText == text.replacingOccurrences(of: "- [ ] ", with: "").replacingOccurrences(of: "- [x] ", with: "").replacingOccurrences(of: "- [X] ", with: "")
+                }) {
+                    // Preserve the existing task's status if it's in progress
+                    tasks.append(existingTask)
+                } else {
+                    // New task, set status based on checkbox
+                    let status: TaskStatus = isCompleted ? .completed : .todo
+                    let task = FocusTask(text: text, status: status, projectId: project.id)
+                    tasks.append(task)
+                }
             }
         }
         
@@ -321,5 +379,16 @@ class FocusManager: ObservableObject {
     
     func getFocusedProject(for task: FocusTask) -> FocusedProject? {
         return focusedProjects.first { $0.projectId == task.projectId }
+    }
+    
+    func getProjectColor(for projectId: UUID) -> String {
+        // Find the index of this project in the active projects list
+        guard let index = activeProjects.firstIndex(where: { $0.projectId == projectId }) else {
+            return "gray"
+        }
+        
+        // Color palette for up to 5 projects
+        let colors = ["blue", "green", "orange", "purple", "pink"]
+        return colors[index % colors.count]
     }
 }

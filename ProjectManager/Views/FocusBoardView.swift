@@ -7,6 +7,39 @@ struct FocusBoardView: View {
     @State private var showingProjectSelector = false
     @State private var selectedProjectForNewTask: FocusedProject?
     @State private var newTaskText = ""
+    @State private var selectedProjectsForFilter: Set<UUID> = {
+        if let data = UserDefaults.standard.data(forKey: "focusBoardFilteredProjects"),
+           let ids = try? JSONDecoder().decode(Set<UUID>.self, from: data) {
+            return ids
+        }
+        return []
+    }()
+    
+    // Computed properties for filtered tasks
+    private var isFilterActive: Bool {
+        !selectedProjectsForFilter.isEmpty
+    }
+    
+    private var filteredTodoTasks: [FocusTask] {
+        guard isFilterActive else { return focusManager.todoTasks }
+        return focusManager.todoTasks.filter { task in
+            selectedProjectsForFilter.contains(task.projectId)
+        }
+    }
+    
+    private var filteredInProgressTasks: [FocusTask] {
+        guard isFilterActive else { return focusManager.inProgressTasks }
+        return focusManager.inProgressTasks.filter { task in
+            selectedProjectsForFilter.contains(task.projectId)
+        }
+    }
+    
+    private var filteredCompletedTasks: [FocusTask] {
+        guard isFilterActive else { return focusManager.completedTasks }
+        return focusManager.completedTasks.filter { task in
+            selectedProjectsForFilter.contains(task.projectId)
+        }
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -25,7 +58,7 @@ struct FocusBoardView: View {
                             HStack {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .foregroundColor(.orange)
-                                Text("\(focusManager.activeProjects.count) active projects (max \(5))")
+                                Text("\(focusManager.activeProjects.count) active projects (max \(focusManager.maxActive))")
                                     .font(.caption)
                                     .foregroundColor(.orange)
                             }
@@ -37,7 +70,7 @@ struct FocusBoardView: View {
                             HStack {
                                 Image(systemName: "info.circle")
                                     .foregroundColor(.blue)
-                                Text("\(focusManager.activeProjects.count) active projects (min \(3) recommended)")
+                                Text("\(focusManager.activeProjects.count) active projects (min \(focusManager.minActive) recommended)")
                                     .font(.caption)
                                     .foregroundColor(.blue)
                             }
@@ -52,6 +85,8 @@ struct FocusBoardView: View {
                         }
                     }
                     
+                    // Removed filter button - now inline
+                    
                     Button("Manage Projects") {
                         showingProjectSelector = true
                     }
@@ -61,8 +96,27 @@ struct FocusBoardView: View {
                     }
                 }
                 
-                // Insights row
+                // Insights row and filter indicators
                 HStack {
+                    if isFilterActive {
+                        HStack {
+                            Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                                .foregroundColor(.orange)
+                            Text("Filtered: \(selectedProjectsForFilter.count) project(s)")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                            Button("Clear") {
+                                selectedProjectsForFilter.removeAll()
+                            }
+                            .font(.caption2)
+                            .foregroundColor(.orange)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(6)
+                    }
+                    
                     if !focusManager.staleActiveProjects.isEmpty {
                         HStack {
                             Image(systemName: "clock")
@@ -90,13 +144,32 @@ struct FocusBoardView: View {
             
             Divider()
             
+            // Project Filter Section
+            if !focusManager.activeProjects.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(focusManager.activeProjects) { project in
+                            ProjectFilterChip(
+                                project: project,
+                                focusManager: focusManager,
+                                selectedProjects: $selectedProjectsForFilter
+                            )
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+                .frame(height: 40)
+                
+                Divider()
+            }
+            
             // Task Board - 3 columns for task statuses
             HStack(alignment: .top, spacing: 1) {
                 // To Do Column
                 TaskColumnView(
                     title: "To Do",
                     subtitle: TaskStatus.todo.description,
-                    tasks: focusManager.todoTasks,
+                    tasks: filteredTodoTasks,
                     taskStatus: .todo,
                     focusManager: focusManager,
                     projectsManager: projectsManager
@@ -108,7 +181,7 @@ struct FocusBoardView: View {
                 TaskColumnView(
                     title: "In Progress",
                     subtitle: TaskStatus.inProgress.description,
-                    tasks: focusManager.inProgressTasks,
+                    tasks: filteredInProgressTasks,
                     taskStatus: .inProgress,
                     focusManager: focusManager,
                     projectsManager: projectsManager
@@ -120,7 +193,7 @@ struct FocusBoardView: View {
                 TaskColumnView(
                     title: "Completed",
                     subtitle: TaskStatus.completed.description,
-                    tasks: focusManager.completedTasks,
+                    tasks: filteredCompletedTasks,
                     taskStatus: .completed,
                     focusManager: focusManager,
                     projectsManager: projectsManager
@@ -133,6 +206,12 @@ struct FocusBoardView: View {
         }
         .onChange(of: projectsManager.projects) { newProjects in
             focusManager.syncWithProjects(newProjects)
+        }
+        .onChange(of: selectedProjectsForFilter) { newFilter in
+            // Save filter to UserDefaults
+            if let data = try? JSONEncoder().encode(newFilter) {
+                UserDefaults.standard.set(data, forKey: "focusBoardFilteredProjects")
+            }
         }
         .sheet(isPresented: $showingProjectSelector) {
             ProjectSelectorView(focusManager: focusManager)
@@ -194,10 +273,11 @@ struct TaskColumnView: View {
                     // Add task button for To Do column
                     if taskStatus == .todo {
                         AddTaskButton(focusManager: focusManager)
+                            .environmentObject(projectsManager)
                     }
                 }
                 .padding(.horizontal, 8)
-                .padding(.bottom, 8)
+                .padding(.vertical, 8)
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -213,11 +293,31 @@ struct TaskCardView: View {
     @State private var showingProjectDetail = false
     
     var projectName: String {
-        focusManager.getProjectName(for: task)
+        if let project = focusManager.projects.first(where: { $0.id == task.projectId }) {
+            return project.name
+        }
+        // Fallback: try to get from projectsManager if focusManager not synced yet
+        if let project = projectsManager.projects.first(where: { $0.id == task.projectId }) {
+            return project.name
+        }
+        return "Unknown Project"
     }
     
     var project: Project? {
-        focusManager.projects.first { $0.id == task.projectId }
+        focusManager.projects.first { $0.id == task.projectId } ??
+        projectsManager.projects.first { $0.id == task.projectId }
+    }
+    
+    var projectColor: Color {
+        let colorName = focusManager.getProjectColor(for: task.projectId)
+        switch colorName {
+        case "blue": return .blue
+        case "green": return .green
+        case "orange": return .orange
+        case "purple": return .purple
+        case "pink": return .pink
+        default: return .gray
+        }
     }
     
     var body: some View {
@@ -226,10 +326,10 @@ struct TaskCardView: View {
             HStack {
                 Text(projectName)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.white)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Color.secondary.opacity(0.15))
+                    .background(projectColor)
                     .cornerRadius(4)
                 
                 Spacer()
@@ -295,11 +395,16 @@ struct TaskCardView: View {
         .padding(8)
         .background(Color(NSColor.controlBackgroundColor))
         .cornerRadius(6)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(projectColor.opacity(0.3), lineWidth: 2)
+        )
         .shadow(radius: 1)
         .sheet(isPresented: $showingProjectDetail) {
             if let proj = project {
                 ProjectDetailView(project: proj)
                     .environmentObject(projectsManager)
+                    .frame(minWidth: 800, minHeight: 600)
             }
         }
     }
@@ -342,6 +447,7 @@ struct AddTaskButton: View {
         .sheet(isPresented: $showingProjectPicker) {
             ProjectPickerDialog(
                 activeProjects: focusManager.activeProjects,
+                focusManager: focusManager,
                 onSelect: { project in
                     selectedProject = project
                     showingProjectPicker = false
@@ -380,7 +486,7 @@ struct AddTaskButton: View {
 }
 
 struct ProjectSelectorView: View {
-    let focusManager: FocusManager
+    @ObservedObject var focusManager: FocusManager
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -388,7 +494,7 @@ struct ProjectSelectorView: View {
             Text("Manage Active Projects")
                 .font(.headline)
             
-            Text("Select 3-5 projects to focus on. Only tasks from active projects will appear in the focus board.")
+            Text("Select \(focusManager.minActive)-\(focusManager.maxActive) projects to focus on. Only tasks from active projects will appear in the focus board.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -397,7 +503,7 @@ struct ProjectSelectorView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Active Projects (\(focusManager.activeProjects.count)/5)")
+                        Text("Active Projects (\(focusManager.activeProjects.count)/\(focusManager.maxActive))")
                             .font(.subheadline)
                             .fontWeight(.medium)
                         
@@ -436,7 +542,7 @@ struct ProjectSelectorView: View {
 
 struct FocusProjectRowView: View {
     let project: FocusedProject
-    let focusManager: FocusManager
+    @ObservedObject var focusManager: FocusManager
     let isActive: Bool
     
     var projectName: String {
@@ -447,6 +553,7 @@ struct FocusProjectRowView: View {
         HStack {
             Text(projectName)
                 .font(.subheadline)
+                .foregroundColor(.primary)
             
             Spacer()
             
@@ -457,12 +564,13 @@ struct FocusProjectRowView: View {
                 .font(.caption)
                 .foregroundColor(.red)
             } else {
+                let isDisabled = focusManager.activeProjects.count >= focusManager.maxActive
                 Button("Activate") {
                     focusManager.activateProject(project)
                 }
                 .font(.caption)
-                .foregroundColor(.blue)
-                .disabled(focusManager.activeProjects.count >= 5)
+                .foregroundColor(isDisabled ? .gray : .blue)
+                .disabled(isDisabled)
             }
         }
         .padding(.vertical, 4)
@@ -474,6 +582,7 @@ struct FocusProjectRowView: View {
 
 struct ProjectPickerDialog: View {
     let activeProjects: [FocusedProject]
+    let focusManager: FocusManager
     let onSelect: (FocusedProject) -> Void
     let onCancel: () -> Void
     
@@ -488,7 +597,7 @@ struct ProjectPickerDialog: View {
                         onSelect(project)
                     }) {
                         HStack {
-                            Text(project.project?.name ?? "Unknown Project")
+                            Text(focusManager.getProject(for: project)?.name ?? "Unknown Project")
                                 .font(.subheadline)
                             Spacer()
                         }
@@ -528,25 +637,30 @@ struct ProjectReplacementDialog: View {
                         .font(.subheadline)
                         .fontWeight(.medium)
                     
-                    ForEach(focusManager.inactiveProjects.prefix(5)) { inactiveProject in
-                        Button(action: {
-                            focusManager.replaceProject(project, with: inactiveProject)
-                        }) {
-                            HStack {
-                                Text(focusManager.getProject(for: inactiveProject)?.name ?? "Unknown")
-                                    .font(.subheadline)
-                                Spacer()
-                                Text("Select")
-                                    .font(.caption)
-                                    .foregroundColor(.blue)
+                    ScrollView {
+                        VStack(spacing: 4) {
+                            ForEach(focusManager.inactiveProjects) { inactiveProject in
+                                Button(action: {
+                                    focusManager.replaceProject(project, with: inactiveProject)
+                                }) {
+                                    HStack {
+                                        Text(focusManager.getProject(for: inactiveProject)?.name ?? "Unknown")
+                                            .font(.subheadline)
+                                        Spacer()
+                                        Text("Select")
+                                            .font(.caption)
+                                            .foregroundColor(.blue)
+                                    }
+                                    .padding(.vertical, 6)
+                                    .padding(.horizontal, 8)
+                                    .background(Color(NSColor.controlBackgroundColor))
+                                    .cornerRadius(4)
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 8)
-                            .background(Color(NSColor.controlBackgroundColor))
-                            .cornerRadius(4)
                         }
-                        .buttonStyle(.plain)
                     }
+                    .frame(maxHeight: 200)
                 }
                 
                 HStack {
@@ -565,7 +679,7 @@ struct ProjectReplacementDialog: View {
             }
         }
         .padding()
-        .frame(width: 400)
+        .frame(width: 400, height: 400)
     }
 }
 
@@ -598,3 +712,68 @@ struct AddTaskDialog: View {
         .frame(width: 400)
     }
 }
+
+struct ProjectFilterChip: View {
+    let project: FocusedProject
+    let focusManager: FocusManager
+    @Binding var selectedProjects: Set<UUID>
+    @EnvironmentObject var projectsManager: ProjectsManager
+    
+    var projectName: String {
+        if let proj = focusManager.getProject(for: project) {
+            return proj.name
+        }
+        // Fallback to projectsManager
+        if let proj = projectsManager.projects.first(where: { $0.id == project.projectId }) {
+            return proj.name
+        }
+        return "Unknown Project"
+    }
+    
+    var isSelected: Bool {
+        selectedProjects.contains(project.projectId)
+    }
+    
+    var uncompletedTaskCount: Int {
+        focusManager.allTasks.filter { 
+            $0.projectId == project.projectId && $0.status != .completed 
+        }.count
+    }
+    
+    var projectColor: Color {
+        let colorName = focusManager.getProjectColor(for: project.projectId)
+        switch colorName {
+        case "blue": return .blue
+        case "green": return .green
+        case "orange": return .orange
+        case "purple": return .purple
+        case "pink": return .pink
+        default: return .gray
+        }
+    }
+    
+    var body: some View {
+        Button(action: {
+            if selectedProjects.contains(project.projectId) {
+                selectedProjects.remove(project.projectId)
+            } else {
+                selectedProjects.insert(project.projectId)
+            }
+        }) {
+            HStack(spacing: 4) {
+                Text(projectName)
+                    .font(.caption)
+                Text("(\(uncompletedTaskCount))")
+                    .font(.caption)
+                    .fontWeight(.medium)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(isSelected ? projectColor : Color.secondary.opacity(0.2))
+            .foregroundColor(isSelected ? .white : .primary)
+            .cornerRadius(15)
+        }
+        .buttonStyle(.plain)
+    }
+}
+

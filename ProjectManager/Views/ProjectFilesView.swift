@@ -18,12 +18,44 @@ struct ProjectFilesView: View {
                     Text("This project doesn't contain any files yet.")
                 }
             } else {
-                List(files, children: \.children) { file in
-                    FileRowView(file: file, selectedFile: $selectedFile)
+                VStack(alignment: .leading, spacing: 8) {
+                    // File list with dynamic height
+                    List(files, children: \.children) { file in
+                        FileRowView(file: file, selectedFile: $selectedFile)
+                    }
+                    .listStyle(.plain)
+                    .frame(height: CGFloat(min(files.count, 6)) * 28) // Dynamic height, max 6 items
+                    .background(Color.clear)
+                    
+                    // File content viewer
+                    if let selectedFile = selectedFile, !selectedFile.isDirectory {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Preview: \(selectedFile.name)")
+                                    .font(.headline)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Button("Open in Finder") {
+                                    NSWorkspace.shared.selectFile(selectedFile.url.path, inFileViewerRootedAtPath: selectedFile.url.deletingLastPathComponent().path)
+                                }
+                                .font(.caption)
+                            }
+                            
+                            Divider()
+                            
+                            ScrollView {
+                                FileContentView(file: selectedFile)
+                            }
+                            .frame(maxHeight: 300)
+                            .background(Color(NSColor.textBackgroundColor))
+                            .cornerRadius(8)
+                        }
+                        .padding(.top, 8)
+                    }
                 }
-                .listStyle(.inset(alternatesRowBackgrounds: true))
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
             loadFiles()
         }
@@ -44,6 +76,7 @@ struct ProjectFilesView: View {
             )
             
             for itemURL in contents {
+                // Skip the project overview file
                 if itemURL.lastPathComponent == "\(project.name).md" {
                     continue
                 }
@@ -62,7 +95,7 @@ struct ProjectFilesView: View {
             
             items.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         } catch {
-            print("Error scanning directory: \(error)")
+            print("Error scanning directory \(url.path): \(error)")
         }
         
         return items
@@ -130,8 +163,14 @@ struct FileRowView: View {
         }
         .padding(.vertical, 2)
         .contentShape(Rectangle())
+        .background(selectedFile?.id == file.id ? Color.accentColor.opacity(0.2) : Color.clear)
         .onHover { hovering in
             isHovering = hovering
+        }
+        .onTapGesture {
+            if !file.isDirectory {
+                selectedFile = file
+            }
         }
         .onTapGesture(count: 2) {
             if !file.isDirectory {
@@ -142,5 +181,69 @@ struct FileRowView: View {
     
     private func openFile() {
         NSWorkspace.shared.selectFile(file.url.path, inFileViewerRootedAtPath: file.url.deletingLastPathComponent().path)
+    }
+}
+
+struct FileContentView: View {
+    let file: FileItem
+    @State private var content: String = ""
+    @State private var isLoading = true
+    
+    var body: some View {
+        VStack(alignment: .leading) {
+            if isLoading {
+                HStack {
+                    ProgressView()
+                        .scaleEffect(0.5)
+                    Text("Loading...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding()
+            } else if content.isEmpty {
+                Text("Unable to load file content")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding()
+            } else {
+                if file.url.pathExtension.lowercased() == "md" || file.url.pathExtension.lowercased() == "markdown" {
+                    MarkdownTextView(markdown: content) { _, _ in }
+                        .padding()
+                } else {
+                    ScrollView {
+                        Text(content)
+                            .font(.body.monospaced())
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            loadContent()
+        }
+        .onChange(of: file) { _ in
+            loadContent()
+        }
+    }
+    
+    private func loadContent() {
+        isLoading = true
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let fileContent = try String(contentsOf: file.url, encoding: .utf8)
+                DispatchQueue.main.async {
+                    self.content = fileContent
+                    self.isLoading = false
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.content = ""
+                    self.isLoading = false
+                }
+            }
+        }
     }
 }
