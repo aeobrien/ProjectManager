@@ -83,9 +83,21 @@ struct GitHubRepository {
 // MARK: - GitHub Service
 class GitHubService {
     static let shared = GitHubService()
+
     private let accessToken = ProcessInfo.processInfo.environment["GITHUB_ACCESS_TOKEN"]
-   
+  
+
+    
+    private var accessToken: String? {
+        return KeychainManager.shared.getToken()
+    }
+    
+
     private init() {}
+    
+    func hasAccessToken() -> Bool {
+        return accessToken != nil
+    }
     
     func fetchRecentCommits(for repositories: [GitHubRepository], completion: @escaping ([GitHubCommit]) -> Void) {
         let group = DispatchGroup()
@@ -121,7 +133,9 @@ class GitHubService {
         }
         
         var request = URLRequest(url: url)
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        if let token = accessToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
         
         URLSession.shared.dataTask(with: request) { data, response, error in

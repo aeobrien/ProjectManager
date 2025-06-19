@@ -291,6 +291,8 @@ struct TaskCardView: View {
     let projectsManager: ProjectsManager
     
     @State private var showingProjectDetail = false
+    @State private var showingEditDialog = false
+    @State private var editedTaskText = ""
     
     var projectName: String {
         if let project = focusManager.projects.first(where: { $0.id == task.projectId }) {
@@ -341,6 +343,13 @@ struct TaskCardView: View {
                             focusManager.updateTaskStatus(task, newStatus: status)
                         }
                         .disabled(status == task.status)
+                    }
+                    
+                    Divider()
+                    
+                    Button("Edit Task") {
+                        editedTaskText = task.displayText
+                        showingEditDialog = true
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -407,6 +416,20 @@ struct TaskCardView: View {
                     .frame(minWidth: 800, minHeight: 600)
             }
         }
+        .sheet(isPresented: $showingEditDialog) {
+            EditTaskDialog(
+                taskText: $editedTaskText,
+                originalText: task.displayText,
+                projectName: projectName,
+                onSave: {
+                    focusManager.updateTaskText(task, newText: editedTaskText)
+                    showingEditDialog = false
+                },
+                onCancel: {
+                    showingEditDialog = false
+                }
+            )
+        }
     }
 }
 
@@ -428,10 +451,10 @@ struct AddTaskButton: View {
         }) {
             HStack {
                 Image(systemName: "plus.circle")
-                    .foregroundColor(.accentColor)
-                Text("Add Task")
+                    .foregroundColor(focusManager.activeProjects.isEmpty ? .secondary : .accentColor)
+                Text(focusManager.activeProjects.isEmpty ? "No Active Projects" : "Add Task")
                     .font(.subheadline)
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(focusManager.activeProjects.isEmpty ? .secondary : .accentColor)
                 Spacer()
             }
             .padding(8)
@@ -444,6 +467,7 @@ struct AddTaskButton: View {
         }
         .buttonStyle(.plain)
         .disabled(focusManager.activeProjects.isEmpty)
+        .help(focusManager.activeProjects.isEmpty ? "No active projects. Click 'Manage Projects' to activate projects." : "Add a new task")
         .sheet(isPresented: $showingProjectPicker) {
             ProjectPickerDialog(
                 activeProjects: focusManager.activeProjects,
@@ -774,6 +798,47 @@ struct ProjectFilterChip: View {
             .cornerRadius(15)
         }
         .buttonStyle(.plain)
+    }
+}
+
+struct EditTaskDialog: View {
+    @Binding var taskText: String
+    let originalText: String
+    let projectName: String
+    let onSave: () -> Void
+    let onCancel: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Edit Task")
+                .font(.title2)
+                .fontWeight(.semibold)
+            
+            Text(projectName)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            
+            TextField("Task description", text: $taskText)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .frame(width: 400)
+            
+            HStack(spacing: 12) {
+                Button("Cancel") {
+                    onCancel()
+                }
+                .keyboardShortcut(.escape, modifiers: [])
+                
+                Button("Save") {
+                    onSave()
+                }
+                .keyboardShortcut(.return, modifiers: [])
+                .buttonStyle(.borderedProminent)
+                .disabled(taskText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || 
+                         taskText == originalText)
+            }
+        }
+        .padding(30)
+        .frame(width: 500)
     }
 }
 

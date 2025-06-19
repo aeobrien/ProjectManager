@@ -121,6 +121,37 @@ class FocusManager: ObservableObject {
         saveData()
     }
     
+    func updateTaskText(_ task: FocusTask, newText: String) {
+        // Update in allTasks
+        if let taskIndex = allTasks.firstIndex(where: { $0.id == task.id }) {
+            let oldText = allTasks[taskIndex].displayText
+            let existingTask = allTasks[taskIndex]
+            
+            // Create a new task with the updated text
+            let updatedTask = FocusTask(
+                text: newText,
+                status: existingTask.status,
+                projectId: existingTask.projectId,
+                dueDate: existingTask.dueDate
+            )
+            
+            // Replace the old task with the new one
+            allTasks[taskIndex] = updatedTask
+            
+            // Update in the source project's markdown file
+            if let project = getProject(for: FocusedProject(projectId: task.projectId, status: .active)) {
+                updateTaskTextInProject(project, oldText: oldText, newText: newText)
+            }
+            
+            // Mark the project as worked on
+            if let focusedProject = focusedProjects.first(where: { $0.projectId == task.projectId }) {
+                markProjectAsWorkedOn(focusedProject)
+            }
+            
+            saveData()
+        }
+    }
+    
     private func refreshTasksFromActiveProjects() {
         // Store existing task statuses before refreshing
         let existingTaskStatuses = allTasks.reduce(into: [String: (TaskStatus, UUID)]()) { result, task in
@@ -328,6 +359,28 @@ class FocusManager: ObservableObject {
             viewModel.projectOverview.nextSteps = newTaskLine + "\n" + viewModel.projectOverview.nextSteps
         }
         
+        viewModel.saveOverview()
+    }
+    
+    private func updateTaskTextInProject(_ project: Project, oldText: String, newText: String) {
+        let viewModel = OverviewEditorViewModel(project: project)
+        viewModel.loadOverview()
+        
+        let lines = viewModel.projectOverview.nextSteps.split(separator: "\n", omittingEmptySubsequences: false)
+        var updatedLines: [String] = []
+        
+        for line in lines {
+            let lineStr = String(line)
+            if lineStr.contains(oldText) {
+                // Replace the old text with new text while preserving checkbox state
+                let updatedLine = lineStr.replacingOccurrences(of: oldText, with: newText)
+                updatedLines.append(updatedLine)
+            } else {
+                updatedLines.append(lineStr)
+            }
+        }
+        
+        viewModel.projectOverview.nextSteps = updatedLines.joined(separator: "\n")
         viewModel.saveOverview()
     }
     

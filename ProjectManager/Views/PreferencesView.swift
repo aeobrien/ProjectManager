@@ -23,8 +23,13 @@ struct PreferencesView: View {
             .tabItem {
                 Label("Appearance", systemImage: "paintbrush")
             }
+            
+            GitHubPreferencesView()
+            .tabItem {
+                Label("GitHub", systemImage: "cloud")
+            }
         }
-        .frame(width: 500, height: 400)
+        .frame(width: 550, height: 450)
         .fileImporter(
             isPresented: $showingFolderPicker,
             allowedContentTypes: [.folder],
@@ -223,5 +228,114 @@ struct IgnoredFoldersView: View {
         preferencesManager.addIgnoredFolder(newFolderName)
         newFolderName = ""
         showingAddField = false
+    }
+}
+
+struct GitHubPreferencesView: View {
+    @State private var tokenInput = ""
+    @State private var showingToken = false
+    @State private var hasToken = GitHubService.shared.hasAccessToken()
+    @State private var showingAlert = false
+    @State private var alertMessage = ""
+    
+    var body: some View {
+        Form {
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("GitHub Personal Access Token")
+                        .font(.headline)
+                    
+                    Text("A GitHub personal access token is required to fetch commit information from your repositories.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    HStack {
+                        if hasToken {
+                            if showingToken {
+                                Text(KeychainManager.shared.getToken() ?? "")
+                                    .textSelection(.enabled)
+                                    .font(.system(.body, design: .monospaced))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            } else {
+                                Text("••••••••••••••••••••••••••••••••")
+                                    .font(.system(.body, design: .monospaced))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            
+                            Button(showingToken ? "Hide" : "Show") {
+                                showingToken.toggle()
+                            }
+                            
+                            Button("Remove") {
+                                removeToken()
+                            }
+                            .foregroundColor(.red)
+                        } else {
+                            SecureField("Enter your GitHub token", text: $tokenInput)
+                                .textFieldStyle(.roundedBorder)
+                            
+                            Button("Save") {
+                                saveToken()
+                            }
+                            .disabled(tokenInput.isEmpty)
+                        }
+                    }
+                }
+                .padding(.vertical, 5)
+            }
+            
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("How to get a GitHub Personal Access Token:")
+                        .font(.headline)
+                    
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("1. Go to GitHub.com and sign in")
+                        Text("2. Click your profile picture → Settings")
+                        Text("3. Scroll down and click 'Developer settings'")
+                        Text("4. Click 'Personal access tokens' → 'Tokens (classic)'")
+                        Text("5. Click 'Generate new token' → 'Generate new token (classic)'")
+                        Text("6. Give it a name and select the 'repo' scope")
+                        Text("7. Click 'Generate token' and copy it")
+                    }
+                    .font(.caption)
+                    
+                    Link("Open GitHub Token Settings", 
+                         destination: URL(string: "https://github.com/settings/tokens")!)
+                        .font(.caption)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+        .alert("GitHub Token", isPresented: $showingAlert) {
+            Button("OK") { }
+        } message: {
+            Text(alertMessage)
+        }
+    }
+    
+    private func saveToken() {
+        guard !tokenInput.isEmpty else { return }
+        
+        if KeychainManager.shared.saveToken(tokenInput) {
+            hasToken = true
+            tokenInput = ""
+            alertMessage = "Token saved successfully!"
+        } else {
+            alertMessage = "Failed to save token. Please try again."
+        }
+        showingAlert = true
+    }
+    
+    private func removeToken() {
+        if KeychainManager.shared.deleteToken() {
+            hasToken = false
+            showingToken = false
+            alertMessage = "Token removed successfully!"
+        } else {
+            alertMessage = "Failed to remove token. Please try again."
+        }
+        showingAlert = true
     }
 }
