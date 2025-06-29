@@ -1,0 +1,577 @@
+import Foundation
+#if canImport(CloudKit)
+import CloudKit
+#endif
+import Combine
+
+#if canImport(CloudKit)
+@available(iOS 13.0, macOS 10.15, *)
+public final class CloudKitManager: ObservableObject {
+    public static let shared = CloudKitManager()
+    
+    @Published public var syncStatus: String = "Unknown"
+    @Published public var lastSyncDate: Date?
+    @Published public var isSyncing: Bool = false
+    
+    private let container: CKContainer
+    private let privateDatabase: CKDatabase
+    private var cancellables = Set<AnyCancellable>()
+    private var schemaInitialized = false
+    
+    // Record type names
+    private let projectRecordType = "Project"
+    private let focusTaskRecordType = "FocusTask"
+    private let focusedProjectRecordType = "FocusedProject"
+    
+    private init() {
+        self.container = CKContainer(identifier: "iCloud.AOTondra.ProjectManageriOS")
+        self.privateDatabase = container.privateCloudDatabase
+        
+        // Reset schema flag when initializing
+        schemaInitialized = false
+        
+        checkAccountStatus()
+    }
+    
+    // MARK: - Account Status
+    
+    public func checkAccountStatus() {
+        container.accountStatus { [weak self] status, error in
+            Task { @MainActor in
+                guard let self = self else { return }
+                
+                if let error = error {
+                    self.syncStatus = "Error: \(error.localizedDescription)"
+                    return
+                }
+                
+                switch status {
+                case .available:
+                    self.syncStatus = "Ready"
+                    Task {
+                        // Initialize schema when account is available
+                        await self.initializeSchema()
+                        self.setupSubscriptions()
+                    }
+                case .noAccount:
+                    self.syncStatus = "Not Signed In"
+                case .restricted:
+                    self.syncStatus = "Restricted"
+                case .couldNotDetermine:
+                    self.syncStatus = "Unknown"
+                case .temporarilyUnavailable:
+                    self.syncStatus = "Temporarily Unavailable"
+                @unknown default:
+                    self.syncStatus = "Unknown"
+                }
+            }
+        }
+    }
+    
+    // MARK: - Setup
+    
+    private func initializeSchema() async {
+        // This will create the record types in development environment
+        // In production, you need to deploy the schema from CloudKit Dashboard
+        
+        print("Checking CloudKit schema for container: \(container.containerIdentifier ?? "unknown")")
+        
+        // First check if schema already exists by trying a simple query
+        let testQuery = CKQuery(recordType: projectRecordType, predicate: NSPredicate(format: "syncType == %@", "project"))
+        do {
+            let _ = try await privateDatabase.records(matching: testQuery)
+            print("Schema already exists, skipping initialization")
+            schemaInitialized = true
+            return
+        } catch {
+            print("Schema doesn't exist yet, will initialize: \(error)")
+        }
+        
+        // Create a dummy record for each type to initialize the schema
+        let projectRecord = CKRecord(recordType: projectRecordType)
+        projectRecord["id"] = UUID().uuidString as CKRecordValue
+        projectRecord["name"] = "Schema Init" as CKRecordValue
+        projectRecord["folderPath"] = "file:///tmp" as CKRecordValue
+        projectRecord["syncType"] = "project" as CKRecordValue  // Add a queryable field
+        projectRecord["overviewContent"] = "# Schema Init\n\nThis is a test record." as CKRecordValue
+        
+        let focusTaskRecord = CKRecord(recordType: focusTaskRecordType)
+        focusTaskRecord["id"] = UUID().uuidString as CKRecordValue
+        focusTaskRecord["text"] = "Schema Init" as CKRecordValue
+        focusTaskRecord["status"] = "none" as CKRecordValue
+        focusTaskRecord["projectId"] = UUID().uuidString as CKRecordValue
+        focusTaskRecord["lastModified"] = Date() as CKRecordValue
+        focusTaskRecord["syncType"] = "task" as CKRecordValue  // Add a queryable field
+        
+        let focusedProjectRecord = CKRecord(recordType: focusedProjectRecordType)
+        focusedProjectRecord["id"] = UUID().uuidString as CKRecordValue
+        focusedProjectRecord["projectId"] = UUID().uuidString as CKRecordValue
+        focusedProjectRecord["status"] = "ready" as CKRecordValue
+        focusedProjectRecord["syncType"] = "focused" as CKRecordValue  // Add a queryable field
+        
+        // Try to save and then delete to create schema
+        do {
+            print("Creating Project record type...")
+            let savedProject = try await privateDatabase.save(projectRecord)
+            print("Project record type created successfully")
+            // Delete the initialization record
+            try await privateDatabase.deleteRecord(withID: savedProject.recordID)
+            print("Deleted initialization record")
+        } catch {
+            print("Project schema init error: \(error)")
+        }
+        
+        do {
+            print("Creating FocusTask record type...")
+            let savedTask = try await privateDatabase.save(focusTaskRecord)
+            print("FocusTask record type created successfully")
+            // Delete the initialization record
+            try await privateDatabase.deleteRecord(withID: savedTask.recordID)
+        } catch {
+            print("FocusTask schema init error: \(error)")
+        }
+        
+        do {
+            print("Creating FocusedProject record type...")
+            let savedFocused = try await privateDatabase.save(focusedProjectRecord)
+            print("FocusedProject record type created successfully")
+            // Delete the initialization record
+            try await privateDatabase.deleteRecord(withID: savedFocused.recordID)
+        } catch {
+            print("FocusedProject schema init error: \(error)")
+        }
+        
+        print("CloudKit schema initialization completed")
+        schemaInitialized = true
+    }
+    
+    private func setupSubscriptions() {
+        // Set up push notifications for changes
+        let subscription = CKDatabaseSubscription(subscriptionID: "project-changes")
+        
+        let notificationInfo = CKSubscription.NotificationInfo()
+        notificationInfo.shouldSendContentAvailable = true
+        subscription.notificationInfo = notificationInfo
+        
+        privateDatabase.save(subscription) { _, error in
+            if let error = error {
+                print("Failed to create subscription: \(error)")
+            }
+        }
+    }
+    
+    // MARK: - Sync Operations
+    
+    public func syncAll() async throws {
+        // Ensure schema is initialized first
+        if !schemaInitialized {
+            print("Waiting for schema initialization...")
+            await initializeSchema()
+        }
+        
+        await MainActor.run {
+            isSyncing = true
+            syncStatus = "Syncing..."
+        }
+        
+        do {
+            // Sync projects
+            try await syncProjects()
+            
+            // Sync focused projects
+            try await syncFocusedProjects()
+            
+            // Sync focus tasks
+            try await syncFocusTasks()
+            
+            await MainActor.run {
+                lastSyncDate = Date()
+                syncStatus = "Synced"
+                isSyncing = false
+            }
+            
+            // Save sync date
+            SimpleStorageManager.shared.save(Date(), forKey: "lastCloudKitSync")
+            
+            // Post notification that sync completed
+            NotificationCenter.default.post(name: Notification.Name("CloudKitSyncCompleted"), object: nil)
+            
+        } catch {
+            await MainActor.run {
+                syncStatus = "Error: \(error.localizedDescription)"
+                isSyncing = false
+            }
+            throw error
+        }
+    }
+    
+    // MARK: - Project Sync
+    
+    private func syncProjects() async throws {
+        // Fetch all projects from CloudKit using our queryable field
+        let query = CKQuery(recordType: projectRecordType, predicate: NSPredicate(format: "syncType == %@", "project"))
+        
+        do {
+            let results = try await privateDatabase.records(matching: query)
+            var cloudProjects: [Project] = []
+            
+            for record in results.matchResults {
+                if case .success(let recordResult) = record.1 {
+                    if let project = projectFromRecord(recordResult) {
+                        cloudProjects.append(project)
+                        print("Loaded from CloudKit: \(project.name) (ID: \(project.id), Path: \(project.folderPath))")
+                    }
+                }
+            }
+            
+            print("Found \(cloudProjects.count) projects in CloudKit")
+            
+            // Get local projects
+            let localProjects = SimpleStorageManager.shared.load([Project].self, forKey: "shared_projects") ?? []
+            print("Found \(localProjects.count) local projects")
+            
+            // Merge (simple last-write-wins for now)
+            var mergedProjects = cloudProjects
+            
+            // Add any local projects not in cloud
+            var uploadCount = 0
+            for localProject in localProjects {
+                print("Checking local project: \(localProject.name) (ID: \(localProject.id))")
+                
+                let existsInCloud = mergedProjects.contains(where: { cloudProject in
+                    let matches = cloudProject.id == localProject.id
+                    if matches {
+                        print("  - Found match in cloud by ID")
+                    } else {
+                        // Check if it's the same project with different ID (same name)
+                        if cloudProject.name == localProject.name {
+                            print("  - Found project with same name but different ID!")
+                            print("    Cloud ID: \(cloudProject.id)")
+                            print("    Local ID: \(localProject.id)")
+                            print("    Cloud Path: \(cloudProject.folderPath)")
+                            print("    Local Path: \(localProject.folderPath)")
+                        }
+                    }
+                    return matches
+                })
+                
+                if !existsInCloud {
+                    mergedProjects.append(localProject)
+                    
+                    // Upload to CloudKit
+                    let record = recordFromProject(localProject)
+                    do {
+                        let savedRecord = try await privateDatabase.save(record)
+                        uploadCount += 1
+                        print("  - Successfully uploaded project: \(localProject.name) with record ID: \(savedRecord.recordID)")
+                    } catch {
+                        print("  - ERROR uploading project \(localProject.name): \(error)")
+                        // Still keep it in merged projects for local storage
+                    }
+                } else {
+                    print("  - Project already exists in cloud")
+                }
+            }
+            
+            print("Uploaded \(uploadCount) new projects to CloudKit")
+            
+            // Save merged data locally
+            SimpleStorageManager.shared.save(mergedProjects, forKey: "shared_projects")
+            print("Saved \(mergedProjects.count) total projects locally")
+            
+        } catch {
+            print("Failed to sync projects: \(error)")
+            throw error
+        }
+    }
+    
+    private func syncFocusedProjects() async throws {
+        let query = CKQuery(recordType: focusedProjectRecordType, predicate: NSPredicate(format: "syncType == %@", "focused"))
+        
+        do {
+            let records = try await privateDatabase.records(matching: query)
+            var cloudFocusedProjects: [FocusedProject] = []
+            
+            for record in records.matchResults {
+                if case .success(let recordResult) = record.1 {
+                    if let focusedProject = focusedProjectFromRecord(recordResult) {
+                        cloudFocusedProjects.append(focusedProject)
+                    }
+                }
+            }
+            
+            print("Found \(cloudFocusedProjects.count) focused projects in CloudKit")
+            print("  - Active in cloud: \(cloudFocusedProjects.filter { $0.status == .active }.count)")
+            print("  - Inactive in cloud: \(cloudFocusedProjects.filter { $0.status == .inactive }.count)")
+            
+            let localFocusedProjects = SimpleStorageManager.shared.load([FocusedProject].self, forKey: "shared_focusedProjects") ?? []
+            print("Found \(localFocusedProjects.count) local focused projects")
+            print("  - Active locally: \(localFocusedProjects.filter { $0.status == .active }.count)")
+            print("  - Inactive locally: \(localFocusedProjects.filter { $0.status == .inactive }.count)")
+            
+            // If local has active projects but cloud doesn't, prefer local state
+            let localActiveCount = localFocusedProjects.filter { $0.status == .active }.count
+            let cloudActiveCount = cloudFocusedProjects.filter { $0.status == .active }.count
+            
+            var mergedFocusedProjects: [FocusedProject]
+            if localActiveCount > 0 && cloudActiveCount == 0 {
+                print("WARNING: Local has active projects but CloudKit has none. Using local as base.")
+                mergedFocusedProjects = localFocusedProjects
+                
+                // Upload all local projects to CloudKit
+                for localProject in localFocusedProjects {
+                    let record = recordFromFocusedProject(localProject)
+                    do {
+                        try await privateDatabase.save(record)
+                        print("Uploaded local focused project to CloudKit: \(localProject.projectId) (status: \(localProject.status.rawValue))")
+                    } catch {
+                        print("Failed to upload local project \(localProject.projectId): \(error)")
+                    }
+                }
+            } else {
+                mergedFocusedProjects = cloudFocusedProjects
+            }
+            
+            // Keep track of which project IDs we've seen in cloud
+            let cloudProjectIds = Set(cloudFocusedProjects.map { $0.projectId })
+            
+            // Only process additional syncing if we didn't already use local as base
+            if !(localActiveCount > 0 && cloudActiveCount == 0) {
+                for localFocusedProject in localFocusedProjects {
+                    if !cloudProjectIds.contains(localFocusedProject.projectId) {
+                        // This is a new focused project, add it
+                        mergedFocusedProjects.append(localFocusedProject)
+                        
+                        let record = recordFromFocusedProject(localFocusedProject)
+                        do {
+                            try await privateDatabase.save(record)
+                            print("Uploaded new focused project: \(localFocusedProject.id)")
+                        } catch {
+                            print("Failed to upload focused project \(localFocusedProject.id): \(error)")
+                        }
+                    } else {
+                    // Update existing record if local is different
+                    if let cloudProject = cloudFocusedProjects.first(where: { $0.projectId == localFocusedProject.projectId }) {
+                        var needsUpdate = false
+                        
+                        // Check if status changed (most important)
+                        if cloudProject.status != localFocusedProject.status {
+                            needsUpdate = true
+                            print("Status changed for project \(localFocusedProject.projectId): \(cloudProject.status.rawValue) -> \(localFocusedProject.status.rawValue)")
+                        }
+                        
+                        // Check if local is newer based on lastWorkedOn
+                        if let localLastWorked = localFocusedProject.lastWorkedOn,
+                           let cloudLastWorked = cloudProject.lastWorkedOn,
+                           localLastWorked > cloudLastWorked {
+                            needsUpdate = true
+                        } else if localFocusedProject.lastWorkedOn != nil && cloudProject.lastWorkedOn == nil {
+                            needsUpdate = true
+                        }
+                        
+                        if needsUpdate {
+                            // Local has changes, update cloud
+                            let index = mergedFocusedProjects.firstIndex(where: { $0.projectId == localFocusedProject.projectId })!
+                            mergedFocusedProjects[index] = localFocusedProject
+                            
+                            let record = recordFromFocusedProject(localFocusedProject)
+                            do {
+                                try await privateDatabase.save(record)
+                                print("Updated focused project: \(localFocusedProject.id) (status: \(localFocusedProject.status.rawValue))")
+                            } catch {
+                                print("Failed to update focused project \(localFocusedProject.id): \(error)")
+                            }
+                        }
+                    }
+                }
+            }  // End of if !(localActiveCount > 0 && cloudActiveCount == 0)
+            
+            print("Final merged focused projects: \(mergedFocusedProjects.count)")
+            print("  - Active: \(mergedFocusedProjects.filter { $0.status == .active }.count)")
+            print("  - Inactive: \(mergedFocusedProjects.filter { $0.status == .inactive }.count)")
+            
+            SimpleStorageManager.shared.save(mergedFocusedProjects, forKey: "shared_focusedProjects")
+            
+        } catch {
+            print("Failed to sync focused projects: \(error)")
+            throw error
+        }
+    }
+    
+    private func syncFocusTasks() async throws {
+        let query = CKQuery(recordType: focusTaskRecordType, predicate: NSPredicate(format: "syncType == %@", "task"))
+        
+        do {
+            let records = try await privateDatabase.records(matching: query)
+            var cloudTasks: [FocusTask] = []
+            
+            for record in records.matchResults {
+                if case .success(let recordResult) = record.1 {
+                    if let task = focusTaskFromRecord(recordResult) {
+                        cloudTasks.append(task)
+                    }
+                }
+            }
+            
+            print("Found \(cloudTasks.count) focus tasks in CloudKit")
+            
+            let localTasks = SimpleStorageManager.shared.load([FocusTask].self, forKey: "shared_focusTasks") ?? []
+            print("Found \(localTasks.count) local focus tasks")
+            
+            var mergedTasks = cloudTasks
+            
+            // Keep track of which IDs we've seen in cloud
+            let cloudTaskIds = Set(cloudTasks.map { $0.id })
+            
+            for localTask in localTasks {
+                if !cloudTaskIds.contains(localTask.id) {
+                    // This is a new task, add it
+                    mergedTasks.append(localTask)
+                    
+                    let record = recordFromFocusTask(localTask)
+                    do {
+                        try await privateDatabase.save(record)
+                        print("Uploaded new focus task: \(localTask.id)")
+                    } catch {
+                        print("Failed to upload focus task \(localTask.id): \(error)")
+                    }
+                } else {
+                    // Update existing record if local is newer
+                    if let cloudTask = cloudTasks.first(where: { $0.id == localTask.id }),
+                       localTask.lastModified > cloudTask.lastModified {
+                        // Local is newer, update cloud
+                        let index = mergedTasks.firstIndex(where: { $0.id == localTask.id })!
+                        mergedTasks[index] = localTask
+                        
+                        let record = recordFromFocusTask(localTask)
+                        do {
+                            try await privateDatabase.save(record)
+                            print("Updated focus task: \(localTask.id)")
+                        } catch {
+                            print("Failed to update focus task \(localTask.id): \(error)")
+                        }
+                    }
+                }
+            }
+            
+            SimpleStorageManager.shared.save(mergedTasks, forKey: "shared_focusTasks")
+            
+        } catch {
+            print("Failed to sync focus tasks: \(error)")
+            throw error
+        }
+    }
+    
+    // MARK: - Record Conversions
+    
+    private func recordFromProject(_ project: Project) -> CKRecord {
+        let recordID = CKRecord.ID(recordName: project.id.uuidString)
+        let record = CKRecord(recordType: projectRecordType, recordID: recordID)
+        
+        record["id"] = project.id.uuidString as CKRecordValue
+        record["name"] = project.name as CKRecordValue
+        record["folderPath"] = project.folderPath.absoluteString as CKRecordValue
+        record["syncType"] = "project" as CKRecordValue
+        
+        // Read and add overview content if it exists
+        if FileManager.default.fileExists(atPath: project.overviewPath.path) {
+            do {
+                let overviewContent = try String(contentsOf: project.overviewPath, encoding: .utf8)
+                record["overviewContent"] = overviewContent as CKRecordValue
+            } catch {
+                print("Failed to read overview for \(project.name): \(error)")
+            }
+        }
+        
+        return record
+    }
+    
+    private func projectFromRecord(_ record: CKRecord) -> Project? {
+        guard let name = record["name"] as? String,
+              let folderPathString = record["folderPath"] as? String,
+              let folderURL = URL(string: folderPathString) else {
+            return nil
+        }
+        
+        // Skip schema initialization records
+        if name == "Schema Init" {
+            return nil
+        }
+        
+        let overviewContent = record["overviewContent"] as? String
+        
+        return Project(folderPath: folderURL, overviewContent: overviewContent)
+    }
+    
+    private func recordFromFocusedProject(_ focusedProject: FocusedProject) -> CKRecord {
+        // Use projectId as the record ID to avoid duplicates
+        let recordID = CKRecord.ID(recordName: focusedProject.projectId.uuidString)
+        let record = CKRecord(recordType: focusedProjectRecordType, recordID: recordID)
+        
+        record["id"] = focusedProject.id.uuidString as CKRecordValue
+        record["projectId"] = focusedProject.projectId.uuidString as CKRecordValue
+        record["status"] = focusedProject.status.rawValue as CKRecordValue
+        record["syncType"] = "focused" as CKRecordValue
+        if let lastWorkedOn = focusedProject.lastWorkedOn {
+            record["lastWorkedOn"] = lastWorkedOn as CKRecordValue
+        }
+        
+        return record
+    }
+    
+    private func focusedProjectFromRecord(_ record: CKRecord) -> FocusedProject? {
+        guard let projectIdString = record["projectId"] as? String,
+              let projectId = UUID(uuidString: projectIdString),
+              let statusString = record["status"] as? String,
+              let status = ProjectStatus(rawValue: statusString) else {
+            return nil
+        }
+        
+        var focusedProject = FocusedProject(projectId: projectId, status: status)
+        
+        if let lastWorkedOn = record["lastWorkedOn"] as? Date {
+            focusedProject.lastWorkedOn = lastWorkedOn
+        }
+        
+        return focusedProject
+    }
+    
+    private func recordFromFocusTask(_ task: FocusTask) -> CKRecord {
+        let recordID = CKRecord.ID(recordName: task.id.uuidString)
+        let record = CKRecord(recordType: focusTaskRecordType, recordID: recordID)
+        
+        record["id"] = task.id.uuidString as CKRecordValue
+        record["text"] = task.displayText as CKRecordValue
+        record["status"] = task.status.rawValue as CKRecordValue
+        record["projectId"] = task.projectId.uuidString as CKRecordValue
+        record["lastModified"] = task.lastModified as CKRecordValue
+        record["syncType"] = "task" as CKRecordValue
+        
+        if let dueDate = task.dueDate {
+            record["dueDate"] = dueDate as CKRecordValue
+        }
+        
+        return record
+    }
+    
+    private func focusTaskFromRecord(_ record: CKRecord) -> FocusTask? {
+        guard let text = record["text"] as? String,
+              let statusString = record["status"] as? String,
+              let status = TaskStatus(rawValue: statusString),
+              let projectIdString = record["projectId"] as? String,
+              let projectId = UUID(uuidString: projectIdString) else {
+            return nil
+        }
+        
+        let task = FocusTask(
+            text: text,
+            status: status,
+            projectId: projectId,
+            dueDate: record["dueDate"] as? Date
+        )
+        
+        return task
+    }
+}
+}
+#endif

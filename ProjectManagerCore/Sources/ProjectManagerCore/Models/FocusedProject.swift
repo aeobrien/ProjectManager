@@ -1,20 +1,20 @@
 import Foundation
 
-struct FocusedProject: Identifiable, Codable, Hashable {
-    let id: UUID
-    let projectId: UUID
-    var status: ProjectStatus
-    var priority: Int
-    var lastWorkedOn: Date?
-    var activatedDate: Date?
+public struct FocusedProject: Identifiable, Codable, Hashable {
+    public let id: UUID
+    public let projectId: UUID
+    public var status: ProjectStatus
+    public var priority: Int
+    public var lastWorkedOn: Date?
+    public var activatedDate: Date?
     
     // Non-codable computed properties
-    var project: Project? {
+    public var project: Project? {
         // This will be resolved by FocusManager when loading
         return nil
     }
     
-    init(projectId: UUID, status: ProjectStatus = .inactive, priority: Int = 0) {
+    public init(projectId: UUID, status: ProjectStatus = .inactive, priority: Int = 0) {
         self.id = UUID()
         self.projectId = projectId
         self.status = status
@@ -23,32 +23,32 @@ struct FocusedProject: Identifiable, Codable, Hashable {
         self.activatedDate = status == .active ? Date() : nil
     }
     
-    mutating func activate() {
+    public mutating func activate() {
         status = .active
         activatedDate = Date()
         lastWorkedOn = Date()
     }
     
-    mutating func deactivate() {
+    public mutating func deactivate() {
         status = .inactive
         activatedDate = nil
     }
     
-    mutating func markAsWorkedOn() {
+    public mutating func markAsWorkedOn() {
         lastWorkedOn = Date()
     }
     
-    var isStale: Bool {
+    public var isStale: Bool {
         guard status == .active, let lastWorked = lastWorkedOn else { return false }
         let daysSinceLastWork = Calendar.current.dateComponents([.day], from: lastWorked, to: Date()).day ?? 0
         return daysSinceLastWork >= 7
     }
     
-    static func == (lhs: FocusedProject, rhs: FocusedProject) -> Bool {
+    public static func == (lhs: FocusedProject, rhs: FocusedProject) -> Bool {
         lhs.id == rhs.id
     }
     
-    func hash(into hasher: inout Hasher) {
+    public func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
 }

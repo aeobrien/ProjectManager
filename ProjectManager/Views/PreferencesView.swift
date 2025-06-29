@@ -28,6 +28,16 @@ struct PreferencesView: View {
             .tabItem {
                 Label("GitHub", systemImage: "cloud")
             }
+            
+            OpenAIPreferencesView()
+            .tabItem {
+                Label("OpenAI", systemImage: "mic.circle")
+            }
+            
+            CloudKitPreferencesView()
+            .tabItem {
+                Label("CloudKit", systemImage: "icloud")
+            }
         }
         .frame(width: 550, height: 450)
         .fileImporter(
@@ -234,7 +244,7 @@ struct IgnoredFoldersView: View {
 struct GitHubPreferencesView: View {
     @State private var tokenInput = ""
     @State private var showingToken = false
-    @State private var hasToken = GitHubService.shared.hasAccessToken()
+    @State private var hasToken = SecureTokenStorage.shared.hasGitHubToken()
     @State private var showingAlert = false
     @State private var alertMessage = ""
     
@@ -252,7 +262,7 @@ struct GitHubPreferencesView: View {
                     HStack {
                         if hasToken {
                             if showingToken {
-                                Text(KeychainManager.shared.getToken() ?? "")
+                                Text(SecureTokenStorage.shared.getGitHubToken() ?? "")
                                     .textSelection(.enabled)
                                     .font(.system(.body, design: .monospaced))
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -318,24 +328,125 @@ struct GitHubPreferencesView: View {
     private func saveToken() {
         guard !tokenInput.isEmpty else { return }
         
-        if KeychainManager.shared.saveToken(tokenInput) {
-            hasToken = true
-            tokenInput = ""
-            alertMessage = "Token saved successfully!"
-        } else {
-            alertMessage = "Failed to save token. Please try again."
-        }
+        SecureTokenStorage.shared.saveGitHubToken(tokenInput)
+        hasToken = true
+        tokenInput = ""
+        alertMessage = "Token saved successfully!"
         showingAlert = true
     }
     
     private func removeToken() {
-        if KeychainManager.shared.deleteToken() {
-            hasToken = false
-            showingToken = false
-            alertMessage = "Token removed successfully!"
-        } else {
-            alertMessage = "Failed to remove token. Please try again."
+        SecureTokenStorage.shared.deleteGitHubToken()
+        hasToken = false
+        showingToken = false
+        alertMessage = "Token removed successfully!"
+        showingAlert = true
+    }
+}
+
+struct OpenAIPreferencesView: View {
+    @State private var keyInput = ""
+    @State private var showingKey = false
+    @State private var hasKey = SecureTokenStorage.shared.hasOpenAIKey()
+    @State private var showingAlert = false
+    @State private var alertMessage = ""
+    
+    var body: some View {
+        Form {
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("OpenAI API Key")
+                        .font(.headline)
+                    
+                    Text("An OpenAI API key is required for voice transcription features.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    HStack {
+                        if hasKey {
+                            if showingKey {
+                                Text(SecureTokenStorage.shared.getOpenAIKey() ?? "")
+                                    .textSelection(.enabled)
+                                    .font(.system(.body, design: .monospaced))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            } else {
+                                Text("••••••••••••••••••••••••••••••••")
+                                    .font(.system(.body, design: .monospaced))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            
+                            Button(showingKey ? "Hide" : "Show") {
+                                showingKey.toggle()
+                            }
+                            
+                            Button("Remove") {
+                                removeKey()
+                            }
+                            .foregroundColor(.red)
+                        } else {
+                            SecureField("Enter your OpenAI API key", text: $keyInput)
+                                .textFieldStyle(.roundedBorder)
+                            
+                            Button("Save") {
+                                saveKey()
+                            }
+                            .disabled(keyInput.isEmpty)
+                        }
+                    }
+                }
+                .padding(.vertical, 5)
+            }
+            
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("How to get an OpenAI API Key:")
+                        .font(.headline)
+                    
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("1. Go to platform.openai.com and sign in")
+                        Text("2. Click on your profile → View API keys")
+                        Text("3. Click 'Create new secret key'")
+                        Text("4. Give it a name (e.g., 'ProjectManager')")
+                        Text("5. Copy the key immediately (you won't see it again!)")
+                        Text("6. Make sure you have credits in your account")
+                    }
+                    .font(.caption)
+                    
+                    Link("Open OpenAI API Keys", 
+                         destination: URL(string: "https://platform.openai.com/api-keys")!)
+                        .font(.caption)
+                    
+                    Text("Note: Voice transcription uses the Whisper API and costs approximately $0.006 per minute of audio.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.top, 5)
+                }
+            }
         }
+        .formStyle(.grouped)
+        .padding()
+        .alert("OpenAI API Key", isPresented: $showingAlert) {
+            Button("OK") { }
+        } message: {
+            Text(alertMessage)
+        }
+    }
+    
+    private func saveKey() {
+        guard !keyInput.isEmpty else { return }
+        
+        SecureTokenStorage.shared.saveOpenAIKey(keyInput)
+        hasKey = true
+        keyInput = ""
+        alertMessage = "API key saved successfully!"
+        showingAlert = true
+    }
+    
+    private func removeKey() {
+        SecureTokenStorage.shared.deleteOpenAIKey()
+        hasKey = false
+        showingKey = false
+        alertMessage = "API key removed successfully!"
         showingAlert = true
     }
 }

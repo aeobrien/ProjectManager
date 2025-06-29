@@ -1,4 +1,5 @@
 import SwiftUI
+import ProjectManagerCore
 
 struct ProjectDetailView: View {
     let project: Project
@@ -74,7 +75,7 @@ struct ProjectDetailView: View {
                         }
                     }
                     .listStyle(SidebarListStyle())
-                    .onChange(of: selectedSection) { newSection in
+                    .onChange(of: selectedSection) { oldValue, newSection in
                         if showFullDocument && newSection != "files" {
                             scrollToSection = newSection
                         }
@@ -243,7 +244,7 @@ struct ProjectDetailView: View {
             }
             // For structured content, leave selection as nil to show full document
         }
-        .onChange(of: viewModel.hasUnstructuredContent) { hasUnstructured in
+        .onChange(of: viewModel.hasUnstructuredContent) { oldValue, hasUnstructured in
             if hasUnstructured {
                 selectedSection = "migrate"
             }
@@ -291,7 +292,7 @@ struct OverviewSectionView: View {
                     .background(Color(NSColor.controlBackgroundColor))
                     .cornerRadius(8)
                     .frame(minHeight: 200)
-                    .onChange(of: content) { _ in
+                    .onChange(of: content) {
                         onSave()
                     }
             } else {

@@ -1,4 +1,5 @@
 import SwiftUI
+import ProjectManagerCore
 
 struct RenameProjectSheet: View {
     let project: Project

@@ -1,4 +1,5 @@
 import SwiftUI
+import ProjectManagerCore
 
 struct ProjectsListView: View {
     @StateObject private var projectsManager = ProjectsManager()
@@ -14,6 +15,7 @@ struct ProjectsListView: View {
                 ForEach(projectsManager.projects) { project in
                     NavigationLink(value: project) {
                         ProjectRowView(project: project)
+                            .environmentObject(projectsManager)
                     }
                     .contextMenu {
                         Button("Rename") {
@@ -130,7 +132,9 @@ struct ProjectsListView: View {
 
 struct ProjectRowView: View {
     let project: Project
+    @EnvironmentObject var projectsManager: ProjectsManager
     @State private var needsMigration = false
+    @State private var projectTags: [String] = []
     
     var body: some View {
         HStack {
@@ -142,9 +146,27 @@ struct ProjectRowView: View {
                     .foregroundColor(project.hasOverview ? .accentColor : .secondary)
             }
             
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(project.name)
                     .font(.headline)
+                
+                if !projectTags.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(projectTags.prefix(3), id: \.self) { tag in
+                            Text("#\(tag)")
+                                .font(.caption2)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.accentColor.opacity(0.2))
+                                .cornerRadius(8)
+                        }
+                        if projectTags.count > 3 {
+                            Text("+\(projectTags.count - 3)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
                 
                 Text(project.folderPath.path)
                     .font(.caption)
@@ -155,6 +177,7 @@ struct ProjectRowView: View {
         .padding(.vertical, 2)
         .onAppear {
             checkIfNeedsMigration()
+            loadTags()
         }
     }
     
@@ -173,5 +196,11 @@ struct ProjectRowView: View {
         } catch {
             needsMigration = false
         }
+    }
+    
+    private func loadTags() {
+        let viewModel = OverviewEditorViewModel(project: project)
+        viewModel.loadOverview()
+        projectTags = projectsManager.tagManager.extractTags(from: viewModel.projectOverview.tags)
     }
 }

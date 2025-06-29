@@ -8,6 +8,11 @@ typealias TranscriptionResultTuple = (original: String?, final: String)
 class TranscriptionService {
     typealias StatusUpdateHandler = ((String) -> Void)
     
+    // Check if API key is configured
+    func hasAPIKey() -> Bool {
+        return apiKey != nil
+    }
+    
     // MARK: - Transcription Persistence
     
     private var transcriptionsFolder: URL {
@@ -71,7 +76,9 @@ class TranscriptionService {
     
     // MARK: - API Configuration
     
-    private let apiKey = "" // Replace with actual API key or use secure storage
+    private var apiKey: String? {
+        return SecureTokenStorage.shared.getOpenAIKey()
+    }
     private let transcriptionEndpoint = "https://api.openai.com/v1/audio/transcriptions"
     private let chatCompletionEndpoint = "https://api.openai.com/v1/chat/completions"
     
@@ -85,6 +92,7 @@ class TranscriptionService {
         case apiError(message: String)
         case serverError(statusCode: Int)
         case fileTooLarge(sizeMB: Double)
+        case missingAPIKey
         
         var errorDescription: String? {
             switch self {
@@ -102,6 +110,8 @@ class TranscriptionService {
                 return "Server Error: HTTP \(statusCode)"
             case .fileTooLarge(let sizeMB):
                 return "Audio file is too large (\(String(format: "%.1f", sizeMB))MB). Maximum size is 25MB."
+            case .missingAPIKey:
+                return "OpenAI API key not configured. Please add your API key in Preferences."
             }
         }
     }
@@ -113,6 +123,13 @@ class TranscriptionService {
         statusUpdate: StatusUpdateHandler? = nil,
         completion: @escaping (Result<TranscriptionResultTuple, Error>) -> Void
     ) {
+        // Check for API key
+        guard let apiKey = apiKey else {
+            statusUpdate?("Error: OpenAI API key not configured")
+            completion(.failure(TranscriptionError.missingAPIKey))
+            return
+        }
+        
         // Validate audio file size
         var fileSizeMB: Double = 0
         do {
@@ -255,6 +272,12 @@ class TranscriptionService {
     ) {
         print("processTranscription called with transcription length: \(initialTranscription.count)")
         print("Prompt length: \(prompt.count)")
+        
+        guard let apiKey = apiKey else {
+            statusUpdate?("Error: OpenAI API key not configured")
+            completion(.failure(TranscriptionError.missingAPIKey))
+            return
+        }
         
         guard let url = URL(string: chatCompletionEndpoint) else {
             print("Invalid chatCompletionEndpoint: \(chatCompletionEndpoint)")

@@ -1,10 +1,12 @@
 import Foundation
 import Combine
+import ProjectManagerCore
 
 class ProjectsManager: ObservableObject {
     @Published var projects: [Project] = []
     @Published var selectedProject: Project?
     
+    let tagManager = TagManager()
     private let preferencesManager = PreferencesManager.shared
     private var cancellables = Set<AnyCancellable>()
     private let fileMonitor = FileMonitor()
@@ -74,14 +76,26 @@ class ProjectsManager: ObservableObject {
             
             sortProjects()
             
+            // Sync tags from all projects
+            tagManager.syncTagsFromProjects(projects)
+            
             // Check for first run and migrate projects if needed
             checkAndMigrateProjects()
+            
+            // Save projects to shared app group for syncing
+            saveProjectsToSharedStorage()
         } catch {
             print("Error scanning projects: \(error)")
             print("Folder path: \(folder.path)")
             print("Can read: \(FileManager.default.isReadableFile(atPath: folder.path))")
             projects = []
         }
+    }
+    
+    private func saveProjectsToSharedStorage() {
+        // Save projects to shared app group for CloudKit sync
+        SimpleStorageManager.shared.save(projects, forKey: "shared_projects")
+        print("Saved \(projects.count) projects to shared storage")
     }
     
     private func checkAndMigrateProjects() {

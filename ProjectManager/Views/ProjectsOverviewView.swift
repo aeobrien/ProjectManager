@@ -1,4 +1,5 @@
 import SwiftUI
+import ProjectManagerCore
 
 struct ProjectsOverviewView: View {
     @EnvironmentObject var projectsManager: ProjectsManager
@@ -321,6 +322,7 @@ struct ProjectOverviewRow: View {
     let isEditing: Bool
     let onToggleEdit: () -> Void
     @StateObject private var viewModel: OverviewEditorViewModel
+    @EnvironmentObject var projectsManager: ProjectsManager
     @State private var editedStatus: String = ""
     @State private var editedNextSteps: String = ""
     @State private var showAddStatusDialog = false
@@ -331,6 +333,7 @@ struct ProjectOverviewRow: View {
     @State private var newNextStepText = ""
     @State private var editStatusText = ""
     @State private var editNextStepsText = ""
+    @State private var projectTags: [String] = []
     
     init(project: Project, isEditing: Bool, onToggleEdit: @escaping () -> Void) {
         self.project = project
@@ -400,6 +403,20 @@ struct ProjectOverviewRow: View {
                         .foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                
+                // Tags
+                TagEditor(tags: $projectTags, tagManager: projectsManager.tagManager)
+                    .onChange(of: projectTags) { newTags in
+                        // Save tags to overview
+                        let formattedTags = projectsManager.tagManager.formatTags(newTags)
+                        print("Saving tags for \(project.name): \(formattedTags)")
+                        viewModel.projectOverview.tags = formattedTags
+                        viewModel.saveOverview()
+                        
+                        // Verify it was saved
+                        viewModel.loadOverview()
+                        print("After save, tags are: \(viewModel.projectOverview.tags)")
+                    }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(maxWidth: .infinity * 0.4)
@@ -567,6 +584,12 @@ struct ProjectOverviewRow: View {
             .onAppear {
                 editNextStepsText = viewModel.projectOverview.nextSteps
             }
+        }
+        .onAppear {
+            // Ensure overview is loaded
+            viewModel.loadOverview()
+            // Load tags from overview
+            projectTags = projectsManager.tagManager.extractTags(from: viewModel.projectOverview.tags)
         }
     }
     

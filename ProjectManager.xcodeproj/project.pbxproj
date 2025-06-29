@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		DD4EDB1D2E0D47C4008353E4 /* ProjectManagerCore in Frameworks */ = {isa = PBXBuildFile; productRef = DD4EDB1C2E0D47C4008353E4 /* ProjectManagerCore */; };
+		DD4EDB1F2E0D47C4008353E4 /* ProjectManagerCore in Frameworks */ = {isa = PBXBuildFile; productRef = DD4EDB1E2E0D47C4008353E4 /* ProjectManagerCore */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		DD45D0F42DFDB8D600FCC808 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,15 +26,52 @@
 			remoteGlobalIDString = DD45D0E42DFDB8D400FCC808;
 			remoteInfo = ProjectManager;
 		};
+		DD4EDAC02E0D45F2008353E4 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DD45D0DD2DFDB8D400FCC808 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD4EDAB22E0D45EF008353E4;
+			remoteInfo = ProjectManageriOS;
+		};
+		DD4EDACA2E0D45F2008353E4 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DD45D0DD2DFDB8D400FCC808 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD4EDAB22E0D45EF008353E4;
+			remoteInfo = ProjectManageriOS;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		DD45D0E52DFDB8D400FCC808 /* ProjectManager.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ProjectManager.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DD45D0F32DFDB8D600FCC808 /* ProjectManagerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ProjectManagerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DD45D0FD2DFDB8D600FCC808 /* ProjectManagerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ProjectManagerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DD4EDAB32E0D45EF008353E4 /* ProjectManageriOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ProjectManageriOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DD4EDABF2E0D45F2008353E4 /* ProjectManageriOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ProjectManageriOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DD4EDAC92E0D45F2008353E4 /* ProjectManageriOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ProjectManageriOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DD4EDAE02E0D46A0008353E4 /* FocusManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusManager.swift; sourceTree = "<group>"; };
+		DD4EDAE12E0D46A0008353E4 /* OverviewEditorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewEditorViewModel.swift; sourceTree = "<group>"; };
+		DD4EDAE22E0D46A0008353E4 /* PreferencesManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesManager.swift; sourceTree = "<group>"; };
+		DD4EDAE32E0D46A0008353E4 /* ProjectsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsManager.swift; sourceTree = "<group>"; };
+		DD4EDAE52E0D46A0008353E4 /* FocusBoardTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusBoardTabView.swift; sourceTree = "<group>"; };
+		DD4EDAE62E0D46A0008353E4 /* GitHubTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubTabView.swift; sourceTree = "<group>"; };
+		DD4EDAE72E0D46A0008353E4 /* OverviewTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewTabView.swift; sourceTree = "<group>"; };
+		DD4EDAE82E0D46A0008353E4 /* ProjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDetailView.swift; sourceTree = "<group>"; };
+		DD4EDAE92E0D46A0008353E4 /* ProjectsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsListView.swift; sourceTree = "<group>"; };
+		DD4EDAEA2E0D46A0008353E4 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		DD4EDAEC2E0D46A0008353E4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		DD4EDAED2E0D46A0008353E4 /* ProjectManager-iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "ProjectManager-iOS.entitlements"; sourceTree = "<group>"; };
+		DD4EDAEE2E0D46A0008353E4 /* ProjectManagerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectManagerApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		DD4EDB242E0D5129008353E4 /* Exceptions for "ProjectManageriOS" folder in "ProjectManageriOS" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = DD4EDAB22E0D45EF008353E4 /* ProjectManageriOS */;
+		};
 		DD98CE0F2DFEF229003131D1 /* Exceptions for "ProjectManager" folder in "ProjectManager" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -58,6 +100,24 @@
 			path = ProjectManagerUITests;
 			sourceTree = "<group>";
 		};
+		DD4EDAB42E0D45EF008353E4 /* ProjectManageriOS */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				DD4EDB242E0D5129008353E4 /* Exceptions for "ProjectManageriOS" folder in "ProjectManageriOS" target */,
+			);
+			path = ProjectManageriOS;
+			sourceTree = "<group>";
+		};
+		DD4EDAC22E0D45F2008353E4 /* ProjectManageriOSTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ProjectManageriOSTests;
+			sourceTree = "<group>";
+		};
+		DD4EDACC2E0D45F2008353E4 /* ProjectManageriOSUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ProjectManageriOSUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -65,6 +125,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DD4EDB1F2E0D47C4008353E4 /* ProjectManagerCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -82,6 +143,28 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DD4EDAB02E0D45EF008353E4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DD4EDB1D2E0D47C4008353E4 /* ProjectManagerCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DD4EDABC2E0D45F2008353E4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DD4EDAC62E0D45F2008353E4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -91,7 +174,11 @@
 				DD45D0E72DFDB8D400FCC808 /* ProjectManager */,
 				DD45D0F62DFDB8D600FCC808 /* ProjectManagerTests */,
 				DD45D1002DFDB8D600FCC808 /* ProjectManagerUITests */,
+				DD4EDAB42E0D45EF008353E4 /* ProjectManageriOS */,
+				DD4EDAC22E0D45F2008353E4 /* ProjectManageriOSTests */,
+				DD4EDACC2E0D45F2008353E4 /* ProjectManageriOSUITests */,
 				DD45D0E62DFDB8D400FCC808 /* Products */,
+				DD4EDAEF2E0D46A0008353E4 /* ProjectManager-iOS */,
 			);
 			sourceTree = "<group>";
 		};
@@ -101,8 +188,71 @@
 				DD45D0E52DFDB8D400FCC808 /* ProjectManager.app */,
 				DD45D0F32DFDB8D600FCC808 /* ProjectManagerTests.xctest */,
 				DD45D0FD2DFDB8D600FCC808 /* ProjectManagerUITests.xctest */,
+				DD4EDAB32E0D45EF008353E4 /* ProjectManageriOS.app */,
+				DD4EDABF2E0D45F2008353E4 /* ProjectManageriOSTests.xctest */,
+				DD4EDAC92E0D45F2008353E4 /* ProjectManageriOSUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		DD4EDADD2E0D46A0008353E4 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		DD4EDADE2E0D46A0008353E4 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		DD4EDADF2E0D46A0008353E4 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		DD4EDAE42E0D46A0008353E4 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				DD4EDAE02E0D46A0008353E4 /* FocusManager.swift */,
+				DD4EDAE12E0D46A0008353E4 /* OverviewEditorViewModel.swift */,
+				DD4EDAE22E0D46A0008353E4 /* PreferencesManager.swift */,
+				DD4EDAE32E0D46A0008353E4 /* ProjectsManager.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		DD4EDAEB2E0D46A0008353E4 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				DD4EDAE52E0D46A0008353E4 /* FocusBoardTabView.swift */,
+				DD4EDAE62E0D46A0008353E4 /* GitHubTabView.swift */,
+				DD4EDAE72E0D46A0008353E4 /* OverviewTabView.swift */,
+				DD4EDAE82E0D46A0008353E4 /* ProjectDetailView.swift */,
+				DD4EDAE92E0D46A0008353E4 /* ProjectsListView.swift */,
+				DD4EDAEA2E0D46A0008353E4 /* SettingsView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		DD4EDAEF2E0D46A0008353E4 /* ProjectManager-iOS */ = {
+			isa = PBXGroup;
+			children = (
+				DD4EDADD2E0D46A0008353E4 /* Models */,
+				DD4EDADE2E0D46A0008353E4 /* Resources */,
+				DD4EDADF2E0D46A0008353E4 /* Services */,
+				DD4EDAE42E0D46A0008353E4 /* ViewModels */,
+				DD4EDAEB2E0D46A0008353E4 /* Views */,
+				DD4EDAEC2E0D46A0008353E4 /* Info.plist */,
+				DD4EDAED2E0D46A0008353E4 /* ProjectManager-iOS.entitlements */,
+				DD4EDAEE2E0D46A0008353E4 /* ProjectManagerApp.swift */,
+			);
+			path = "ProjectManager-iOS";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -125,6 +275,7 @@
 			);
 			name = ProjectManager;
 			packageProductDependencies = (
+				DD4EDB1E2E0D47C4008353E4 /* ProjectManagerCore */,
 			);
 			productName = ProjectManager;
 			productReference = DD45D0E52DFDB8D400FCC808 /* ProjectManager.app */;
@@ -176,6 +327,75 @@
 			productReference = DD45D0FD2DFDB8D600FCC808 /* ProjectManagerUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		DD4EDAB22E0D45EF008353E4 /* ProjectManageriOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DD4EDAD72E0D45F2008353E4 /* Build configuration list for PBXNativeTarget "ProjectManageriOS" */;
+			buildPhases = (
+				DD4EDAAF2E0D45EF008353E4 /* Sources */,
+				DD4EDAB02E0D45EF008353E4 /* Frameworks */,
+				DD4EDAB12E0D45EF008353E4 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				DD4EDAB42E0D45EF008353E4 /* ProjectManageriOS */,
+			);
+			name = ProjectManageriOS;
+			packageProductDependencies = (
+				DD4EDB1C2E0D47C4008353E4 /* ProjectManagerCore */,
+			);
+			productName = ProjectManageriOS;
+			productReference = DD4EDAB32E0D45EF008353E4 /* ProjectManageriOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		DD4EDABE2E0D45F2008353E4 /* ProjectManageriOSTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DD4EDAD82E0D45F2008353E4 /* Build configuration list for PBXNativeTarget "ProjectManageriOSTests" */;
+			buildPhases = (
+				DD4EDABB2E0D45F2008353E4 /* Sources */,
+				DD4EDABC2E0D45F2008353E4 /* Frameworks */,
+				DD4EDABD2E0D45F2008353E4 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DD4EDAC12E0D45F2008353E4 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				DD4EDAC22E0D45F2008353E4 /* ProjectManageriOSTests */,
+			);
+			name = ProjectManageriOSTests;
+			packageProductDependencies = (
+			);
+			productName = ProjectManageriOSTests;
+			productReference = DD4EDABF2E0D45F2008353E4 /* ProjectManageriOSTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		DD4EDAC82E0D45F2008353E4 /* ProjectManageriOSUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DD4EDAD92E0D45F2008353E4 /* Build configuration list for PBXNativeTarget "ProjectManageriOSUITests" */;
+			buildPhases = (
+				DD4EDAC52E0D45F2008353E4 /* Sources */,
+				DD4EDAC62E0D45F2008353E4 /* Frameworks */,
+				DD4EDAC72E0D45F2008353E4 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				DD4EDACB2E0D45F2008353E4 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				DD4EDACC2E0D45F2008353E4 /* ProjectManageriOSUITests */,
+			);
+			name = ProjectManageriOSUITests;
+			packageProductDependencies = (
+			);
+			productName = ProjectManageriOSUITests;
+			productReference = DD4EDAC92E0D45F2008353E4 /* ProjectManageriOSUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -197,6 +417,17 @@
 						CreatedOnToolsVersion = 16.3;
 						TestTargetID = DD45D0E42DFDB8D400FCC808;
 					};
+					DD4EDAB22E0D45EF008353E4 = {
+						CreatedOnToolsVersion = 16.3;
+					};
+					DD4EDABE2E0D45F2008353E4 = {
+						CreatedOnToolsVersion = 16.3;
+						TestTargetID = DD4EDAB22E0D45EF008353E4;
+					};
+					DD4EDAC82E0D45F2008353E4 = {
+						CreatedOnToolsVersion = 16.3;
+						TestTargetID = DD4EDAB22E0D45EF008353E4;
+					};
 				};
 			};
 			buildConfigurationList = DD45D0E02DFDB8D400FCC808 /* Build configuration list for PBXProject "ProjectManager" */;
@@ -208,6 +439,9 @@
 			);
 			mainGroup = DD45D0DC2DFDB8D400FCC808;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				DD4EDB1B2E0D47C4008353E4 /* XCLocalSwiftPackageReference "ProjectManagerCore" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = DD45D0E62DFDB8D400FCC808 /* Products */;
 			projectDirPath = "";
@@ -216,6 +450,9 @@
 				DD45D0E42DFDB8D400FCC808 /* ProjectManager */,
 				DD45D0F22DFDB8D600FCC808 /* ProjectManagerTests */,
 				DD45D0FC2DFDB8D600FCC808 /* ProjectManagerUITests */,
+				DD4EDAB22E0D45EF008353E4 /* ProjectManageriOS */,
+				DD4EDABE2E0D45F2008353E4 /* ProjectManageriOSTests */,
+				DD4EDAC82E0D45F2008353E4 /* ProjectManageriOSUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -236,6 +473,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		DD45D0FB2DFDB8D600FCC808 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DD4EDAB12E0D45EF008353E4 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DD4EDABD2E0D45F2008353E4 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DD4EDAC72E0D45F2008353E4 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -266,6 +524,27 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DD4EDAAF2E0D45EF008353E4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DD4EDABB2E0D45F2008353E4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DD4EDAC52E0D45F2008353E4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -278,6 +557,16 @@
 			isa = PBXTargetDependency;
 			target = DD45D0E42DFDB8D400FCC808 /* ProjectManager */;
 			targetProxy = DD45D0FE2DFDB8D600FCC808 /* PBXContainerItemProxy */;
+		};
+		DD4EDAC12E0D45F2008353E4 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD4EDAB22E0D45EF008353E4 /* ProjectManageriOS */;
+			targetProxy = DD4EDAC02E0D45F2008353E4 /* PBXContainerItemProxy */;
+		};
+		DD4EDACB2E0D45F2008353E4 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD4EDAB22E0D45EF008353E4 /* ProjectManageriOS */;
+			targetProxy = DD4EDACA2E0D45F2008353E4 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -530,6 +819,151 @@
 			};
 			name = Release;
 		};
+		DD4EDAD12E0D45F2008353E4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ProjectManageriOS/ProjectManageriOS.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5R2D4Y969H;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ProjectManageriOS/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = AOTondra.ProjectManageriOS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		DD4EDAD22E0D45F2008353E4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ProjectManageriOS/ProjectManageriOS.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5R2D4Y969H;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ProjectManageriOS/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = AOTondra.ProjectManageriOS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		DD4EDAD32E0D45F2008353E4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5R2D4Y969H;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = AOTondra.ProjectManageriOSTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ProjectManageriOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ProjectManageriOS";
+			};
+			name = Debug;
+		};
+		DD4EDAD42E0D45F2008353E4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5R2D4Y969H;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = AOTondra.ProjectManageriOSTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ProjectManageriOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ProjectManageriOS";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		DD4EDAD52E0D45F2008353E4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5R2D4Y969H;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = AOTondra.ProjectManageriOSUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = ProjectManageriOS;
+			};
+			name = Debug;
+		};
+		DD4EDAD62E0D45F2008353E4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5R2D4Y969H;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = AOTondra.ProjectManageriOSUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = ProjectManageriOS;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -569,7 +1003,52 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		DD4EDAD72E0D45F2008353E4 /* Build configuration list for PBXNativeTarget "ProjectManageriOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DD4EDAD12E0D45F2008353E4 /* Debug */,
+				DD4EDAD22E0D45F2008353E4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DD4EDAD82E0D45F2008353E4 /* Build configuration list for PBXNativeTarget "ProjectManageriOSTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DD4EDAD32E0D45F2008353E4 /* Debug */,
+				DD4EDAD42E0D45F2008353E4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DD4EDAD92E0D45F2008353E4 /* Build configuration list for PBXNativeTarget "ProjectManageriOSUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DD4EDAD52E0D45F2008353E4 /* Debug */,
+				DD4EDAD62E0D45F2008353E4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		DD4EDB1B2E0D47C4008353E4 /* XCLocalSwiftPackageReference "ProjectManagerCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ProjectManagerCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		DD4EDB1C2E0D47C4008353E4 /* ProjectManagerCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ProjectManagerCore;
+		};
+		DD4EDB1E2E0D47C4008353E4 /* ProjectManagerCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ProjectManagerCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = DD45D0DD2DFDB8D400FCC808 /* Project object */;
 }

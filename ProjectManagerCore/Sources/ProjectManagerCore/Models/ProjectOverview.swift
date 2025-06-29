@@ -1,26 +1,30 @@
 import Foundation
 
-struct ProjectOverview {
-    var versionHistory: String = ""
-    var coreConcept: String = ""
-    var guidingPrinciples: String = ""
-    var keyFeatures: String = ""
-    var architecture: String = ""
-    var implementationRoadmap: String = ""
-    var currentStatus: String = ""
-    var nextSteps: String = ""
-    var challenges: String = ""
-    var userExperience: String = ""
-    var successMetrics: String = ""
-    var research: String = ""
-    var openQuestions: String = ""
-    var projectLog: String = ""
-    var externalFiles: String = ""
-    var repositories: String = ""
+public struct ProjectOverview: Equatable {
+    public var versionHistory: String = ""
+    public var coreConcept: String = ""
+    public var tags: String = ""
+    public var guidingPrinciples: String = ""
+    public var keyFeatures: String = ""
+    public var architecture: String = ""
+    public var implementationRoadmap: String = ""
+    public var currentStatus: String = ""
+    public var nextSteps: String = ""
+    public var challenges: String = ""
+    public var userExperience: String = ""
+    public var successMetrics: String = ""
+    public var research: String = ""
+    public var openQuestions: String = ""
+    public var projectLog: String = ""
+    public var externalFiles: String = ""
+    public var repositories: String = ""
     
-    static let sectionHeaders = [
+    public init() {}
+    
+    public static let sectionHeaders = [
         "## Version History",
         "## Core Concept",
+        "## Tags",
         "## Guiding Principles & Intentions",
         "## Key Features & Functionality",
         "## Architecture & Structure",
@@ -37,7 +41,7 @@ struct ProjectOverview {
         "## Repositories"
     ]
     
-    static func createTemplate(projectName: String) -> String {
+    public static func createTemplate(projectName: String) -> String {
         let date = Date().formatted(date: .abbreviated, time: .omitted)
         return """
         # \(projectName)
@@ -47,6 +51,9 @@ struct ProjectOverview {
         
         ## Core Concept
         [Comprehensive overview of what the project is and its primary purpose]
+        
+        ## Tags
+        [Add tags to categorize this project]
         
         ## Guiding Principles & Intentions
         [The underlying philosophy, values, and goals driving the project]

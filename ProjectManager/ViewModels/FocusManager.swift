@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import ProjectManagerCore
 
 class FocusManager: ObservableObject {
     @Published var focusedProjects: [FocusedProject] = []
@@ -7,21 +8,106 @@ class FocusManager: ObservableObject {
     @Published var projects: [Project] = []
     @Published var showingProjectSelector = false
     @Published var projectNeedingReplacement: FocusedProject?
+    @Published var showAddTaskDialog = false
+    @Published var projectSlots: [ProjectManagerCore.ProjectSlot] = []
     
     private let maxActiveProjects = 5
     private let minActiveProjects = 3
     
     var maxActive: Int { maxActiveProjects }
     var minActive: Int { minActiveProjects }
-    private var cancellables = Set<AnyCancellable>()
+    var cancellables = Set<AnyCancellable>()
+    
+    @Published var syncStatus: String = ""
+    @Published var isSyncing: Bool = false
+    private var syncInProgress = false
     
     init() {
+        print("=== FocusManager init() ===")
         loadData()
+        initializeSlots()
+        
+        // Store the initial active project IDs before any sync
+        let initialActiveProjectIds = Set(focusedProjects.filter { $0.status == .active }.map { $0.projectId })
+        if !initialActiveProjectIds.isEmpty {
+            print("Found \(initialActiveProjectIds.count) initially active projects")
+        }
+        
+        // TEMPORARILY DISABLED AUTO SYNC
+        // setupCloudKitSync()
+        
+        // Ensure data is saved to shared storage on init
+        // This handles the case where we have UserDefaults data but not shared storage data
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self = self else { return }
+            
+            // Restore active status if it was lost during init
+            if !initialActiveProjectIds.isEmpty {
+                var restored = false
+                for i in 0..<self.focusedProjects.count {
+                    if initialActiveProjectIds.contains(self.focusedProjects[i].projectId) && 
+                       self.focusedProjects[i].status == .inactive {
+                        self.focusedProjects[i].status = .active
+                        restored = true
+                        print("Restored active status for project \(self.focusedProjects[i].projectId)")
+                    }
+                }
+                if restored {
+                    print("Active projects were restored")
+                }
+            }
+            
+            self.saveData()
+        }
+    }
+    
+    // MARK: - Slot Management
+    
+    private func initializeSlots() {
+        // If slots already exist, keep them
+        if !projectSlots.isEmpty {
+            return
+        }
+        
+        // Initialize with 5 empty slots
+        for _ in 0..<maxActiveProjects {
+            projectSlots.append(ProjectManagerCore.ProjectSlot())
+        }
+        
+        // Migrate existing active projects to slots
+        let activeProjects = focusedProjects.filter { $0.status == .active }
+        for (index, project) in activeProjects.prefix(maxActiveProjects).enumerated() {
+            projectSlots[index].occupiedBy = project.projectId
+        }
+    }
+    
+    func getAvailableSlots(for projectTags: Set<String>) -> [ProjectManagerCore.ProjectSlot] {
+        let available = projectSlots.filter { slot in
+            slot.isEmpty && slot.canAcceptProject(withTags: projectTags)
+        }
+        print("Checking slots for tags \(projectTags): found \(available.count) available")
+        for slot in projectSlots {
+            print("Slot \(slot.id): isEmpty=\(slot.isEmpty), requiredTags=\(slot.requiredTags), canAccept=\(slot.canAcceptProject(withTags: projectTags))")
+        }
+        return available
+    }
+    
+    func updateSlotRequirements(_ slotId: UUID, requiredTags: Set<String>) {
+        if let index = projectSlots.firstIndex(where: { $0.id == slotId }) {
+            projectSlots[index].requiredTags = requiredTags
+            saveData()
+        }
     }
     
     // MARK: - Project Management
     
     func syncWithProjects(_ allProjects: [Project]) {
+        print("=== FocusManager syncWithProjects() ===")
+        print("Syncing with \(allProjects.count) projects")
+        print("Current focused projects: \(focusedProjects.count)")
+        print("  - Active: \(focusedProjects.filter { $0.status == .active }.count)")
+        print("  - Inactive: \(focusedProjects.filter { $0.status == .inactive }.count)")
+        
         self.projects = allProjects
         
         // Add new projects to focus system as inactive
@@ -29,13 +115,27 @@ class FocusManager: ObservableObject {
             if !focusedProjects.contains(where: { $0.projectId == project.id }) {
                 let focusedProject = FocusedProject(projectId: project.id, status: .inactive)
                 focusedProjects.append(focusedProject)
+                print("Added new project as inactive: \(project.name)")
             }
         }
         
         // Remove projects that no longer exist
+        let removedCount = focusedProjects.filter { focusedProject in
+            !allProjects.contains { $0.id == focusedProject.projectId }
+        }.count
+        
         focusedProjects.removeAll { focusedProject in
             !allProjects.contains { $0.id == focusedProject.projectId }
         }
+        
+        if removedCount > 0 {
+            print("Removed \(removedCount) projects that no longer exist")
+        }
+        
+        print("After sync:")
+        print("  - Total focused projects: \(focusedProjects.count)")
+        print("  - Active: \(focusedProjects.filter { $0.status == .active }.count)")
+        print("  - Inactive: \(focusedProjects.filter { $0.status == .inactive }.count)")
         
         // Refresh tasks from active projects
         refreshTasksFromActiveProjects()
@@ -46,13 +146,35 @@ class FocusManager: ObservableObject {
         saveData()
     }
     
-    func activateProject(_ project: FocusedProject) {
+    func activateProject(_ project: FocusedProject, inSlot slotId: UUID? = nil) {
         guard let index = focusedProjects.firstIndex(where: { $0.id == project.id }) else { return }
         
-        // Check if we're at the limit
-        if activeProjects.count >= maxActiveProjects {
-            print("Cannot activate: Already at maximum of \(maxActiveProjects) active projects")
+        // Get project tags
+        var projectTags = Set<String>()
+        if let proj = getProject(for: project) {
+            let viewModel = OverviewEditorViewModel(project: proj)
+            viewModel.loadOverview()
+            projectTags = Set(TagManager().extractTags(from: viewModel.projectOverview.tags))
+        }
+        
+        // Find available slot
+        var targetSlot: ProjectManagerCore.ProjectSlot?
+        if let slotId = slotId {
+            // Use specific slot if provided
+            targetSlot = projectSlots.first { $0.id == slotId && $0.isEmpty }
+        } else {
+            // Find any available slot that can accept this project
+            targetSlot = getAvailableSlots(for: projectTags).first
+        }
+        
+        guard let slot = targetSlot else {
+            print("Cannot activate: No available slots for this project")
             return
+        }
+        
+        // Update slot
+        if let slotIndex = projectSlots.firstIndex(where: { $0.id == slot.id }) {
+            projectSlots[slotIndex].occupiedBy = project.projectId
         }
         
         // Create a copy to trigger @Published
@@ -67,6 +189,11 @@ class FocusManager: ObservableObject {
     func deactivateProject(_ project: FocusedProject) {
         guard let index = focusedProjects.firstIndex(where: { $0.id == project.id }) else { return }
         
+        // Clear the slot
+        if let slotIndex = projectSlots.firstIndex(where: { $0.occupiedBy == project.projectId }) {
+            projectSlots[slotIndex].occupiedBy = nil
+        }
+        
         // Create a copy to trigger @Published
         var updatedProjects = focusedProjects
         updatedProjects[index].deactivate()
@@ -75,7 +202,25 @@ class FocusManager: ObservableObject {
         // Remove tasks for this project from the task list
         allTasks.removeAll { $0.projectId == project.projectId }
         
+        // Clean up the filter if this project was filtered
+        cleanupFilterForRemovedProject(project.projectId)
+        
         saveData()
+    }
+    
+    private func cleanupFilterForRemovedProject(_ projectId: UUID) {
+        // Load current filter
+        if let data = UserDefaults.standard.data(forKey: "focusBoardFilteredProjects"),
+           var filteredProjects = try? JSONDecoder().decode(Set<UUID>.self, from: data) {
+            // Remove the project from filter if it exists
+            if filteredProjects.contains(projectId) {
+                filteredProjects.remove(projectId)
+                // Save updated filter
+                if let updatedData = try? JSONEncoder().encode(filteredProjects) {
+                    UserDefaults.standard.set(updatedData, forKey: "focusBoardFilteredProjects")
+                }
+            }
+        }
     }
     
     func markProjectAsWorkedOn(_ project: FocusedProject) {
@@ -152,13 +297,13 @@ class FocusManager: ObservableObject {
         }
     }
     
-    private func refreshTasksFromActiveProjects() {
+    func refreshTasksFromActiveProjects() {
         // Store existing task statuses before refreshing
         let existingTaskStatuses = allTasks.reduce(into: [String: (TaskStatus, UUID)]()) { result, task in
             result[task.displayText] = (task.status, task.projectId)
         }
         
-        allTasks.removeAll()
+        var newTasks: [FocusTask] = []
         
         for focusedProject in activeProjects {
             if let project = getProject(for: focusedProject) {
@@ -173,9 +318,12 @@ class FocusManager: ObservableObject {
                     }
                 }
                 
-                allTasks.append(contentsOf: tasks)
+                newTasks.append(contentsOf: tasks)
             }
         }
+        
+        // Update allTasks in one operation to ensure proper change notification
+        allTasks = newTasks
     }
     
     func refreshTasksForProject(_ project: Project?) {
@@ -187,10 +335,10 @@ class FocusManager: ObservableObject {
                 result[task.displayText] = task.status
             }
         
-        // Remove existing tasks for this project
-        allTasks.removeAll { $0.projectId == project.id }
+        // Get all tasks except for this project
+        var updatedTasks = allTasks.filter { $0.projectId != project.id }
         
-        // Add updated tasks
+        // Add updated tasks for this project
         var tasks = extractTasksFromProject(project)
         
         // Restore in-progress status for matching tasks
@@ -201,7 +349,10 @@ class FocusManager: ObservableObject {
             }
         }
         
-        allTasks.append(contentsOf: tasks)
+        updatedTasks.append(contentsOf: tasks)
+        
+        // Update allTasks in one operation to ensure proper change notification
+        allTasks = updatedTasks
         
         saveData()
     }
@@ -281,6 +432,12 @@ class FocusManager: ObservableObject {
         showingProjectSelector = false
     }
     
+    func removeProjectWithoutReplacement(_ project: FocusedProject) {
+        deactivateProject(project)
+        projectNeedingReplacement = nil
+        showingProjectSelector = false
+    }
+    
     // MARK: - Private Methods
     
     private func extractTasksFromProject(_ project: Project) -> [FocusTask] {
@@ -291,22 +448,43 @@ class FocusManager: ObservableObject {
         let lines = nextSteps.split(separator: "\n")
         
         var tasks: [FocusTask] = []
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.hasPrefix("- [") {
                 let isCompleted = trimmed.hasPrefix("- [x]") || trimmed.hasPrefix("- [X]")
-                let text = String(trimmed)
+                var text = String(trimmed)
+                var completedDate: Date? = nil
+                
+                // Extract completion date if present
+                if isCompleted, let dateMatch = text.range(of: #" \((\d{4}-\d{2}-\d{2})\)"#, options: .regularExpression) {
+                    let dateStr = String(text[dateMatch]).trimmingCharacters(in: CharacterSet(charactersIn: " ()"))
+                    completedDate = dateFormatter.date(from: dateStr)
+                    // Remove date from text for display
+                    text.removeSubrange(dateMatch)
+                }
                 
                 // Check if we already have this task in our allTasks array to preserve its status
+                let cleanDisplayText = text.replacingOccurrences(of: "- [ ] ", with: "")
+                    .replacingOccurrences(of: "- [x] ", with: "")
+                    .replacingOccurrences(of: "- [X] ", with: "")
+                
                 if let existingTask = allTasks.first(where: { 
-                    $0.projectId == project.id && $0.displayText == text.replacingOccurrences(of: "- [ ] ", with: "").replacingOccurrences(of: "- [x] ", with: "").replacingOccurrences(of: "- [X] ", with: "")
+                    $0.projectId == project.id && $0.displayText == cleanDisplayText
                 }) {
                     // Preserve the existing task's status if it's in progress
-                    tasks.append(existingTask)
+                    var updatedTask = existingTask
+                    if isCompleted && existingTask.status != .completed {
+                        updatedTask.status = .completed
+                        updatedTask.completedDate = completedDate
+                    }
+                    tasks.append(updatedTask)
                 } else {
                     // New task, set status based on checkbox
                     let status: TaskStatus = isCompleted ? .completed : .todo
-                    let task = FocusTask(text: text, status: status, projectId: project.id)
+                    let task = FocusTask(text: text, status: status, projectId: project.id, completedDate: completedDate)
                     tasks.append(task)
                 }
             }
@@ -326,14 +504,32 @@ class FocusManager: ObservableObject {
         
         for line in lines {
             let lineStr = String(line)
-            if lineStr.contains(task.displayText) {
+            // Check if this line contains the task (without date suffix)
+            let taskTextToFind = task.displayText
+            if lineStr.contains(taskTextToFind) && (lineStr.contains("- [ ]") || lineStr.contains("- [x]") || lineStr.contains("- [X]")) {
                 // Update this line
                 if isCompleted {
-                    let updatedLine = lineStr
+                    // Remove any existing date before adding new one
+                    var cleanLine = lineStr
+                    if let dateRange = cleanLine.range(of: #" \(\d{4}-\d{2}-\d{2}\)"#, options: .regularExpression) {
+                        cleanLine.removeSubrange(dateRange)
+                    }
+                    
+                    // Add completion date
+                    let dateFormatter = DateFormatter()
+                    dateFormatter.dateFormat = "yyyy-MM-dd"
+                    let dateString = dateFormatter.string(from: Date())
+                    
+                    let updatedLine = cleanLine
                         .replacingOccurrences(of: "- [ ]", with: "- [x]")
-                    updatedLines.append(updatedLine)
+                    updatedLines.append("\(updatedLine) (\(dateString))")
                 } else {
-                    let updatedLine = lineStr
+                    // Remove completion date when unchecking
+                    var updatedLine = lineStr
+                    if let dateRange = updatedLine.range(of: #" \(\d{4}-\d{2}-\d{2}\)"#, options: .regularExpression) {
+                        updatedLine.removeSubrange(dateRange)
+                    }
+                    updatedLine = updatedLine
                         .replacingOccurrences(of: "- [x]", with: "- [ ]")
                         .replacingOccurrences(of: "- [X]", with: "- [ ]")
                     updatedLines.append(updatedLine)
@@ -384,38 +580,267 @@ class FocusManager: ObservableObject {
         viewModel.saveOverview()
     }
     
+    // MARK: - CloudKit Sync
+    
+    private func setupCloudKitSync() {
+        if #available(macOS 10.15, *) {
+            // Observe sync status
+            SimpleSyncManager.shared.$syncStatusText
+                .sink { [weak self] status in
+                    self?.syncStatus = status
+                }
+                .store(in: &cancellables)
+            
+            SimpleSyncManager.shared.$isSyncing
+                .sink { [weak self] syncing in
+                    self?.isSyncing = syncing
+                }
+                .store(in: &cancellables)
+            
+            // Initial sync from CloudKit
+            Task {
+                await syncFromCloudKit()
+            }
+            
+            // Force save current data to shared storage for syncing
+            saveData()
+        }
+    }
+    
+    private func syncFromCloudKit() async {
+        guard #available(macOS 10.15, *) else { return }
+        
+        print("=== FocusManager syncFromCloudKit() ===")
+        
+        do {
+            // Simulate fetch from cloud
+            try await SimpleSyncManager.shared.syncNow()
+            
+            // Load updated data from shared storage
+            await MainActor.run {
+                let sharedProjects = SimpleStorageManager.shared.load([Project].self, forKey: "shared_projects") ?? []
+                let sharedFocusedProjects = SimpleStorageManager.shared.load([FocusedProject].self, forKey: "shared_focusedProjects") ?? []
+                let sharedTasks = SimpleStorageManager.shared.load([FocusTask].self, forKey: "shared_focusTasks") ?? []
+                
+                print("Loaded from CloudKit sync:")
+                print("  - Projects: \(sharedProjects.count)")
+                print("  - Focused Projects: \(sharedFocusedProjects.count)")
+                if !sharedFocusedProjects.isEmpty {
+                    print("    - Active: \(sharedFocusedProjects.filter { $0.status == .active }.count)")
+                    print("    - Inactive: \(sharedFocusedProjects.filter { $0.status == .inactive }.count)")
+                }
+                print("  - Tasks: \(sharedTasks.count)")
+                
+                if !sharedProjects.isEmpty {
+                    self.projects = sharedProjects
+                }
+                if !sharedFocusedProjects.isEmpty {
+                    // Before replacing, check if we're about to lose active projects
+                    let currentActiveIds = Set(self.focusedProjects.filter { $0.status == .active }.map { $0.projectId })
+                    let cloudActiveIds = Set(sharedFocusedProjects.filter { $0.status == .active }.map { $0.projectId })
+                    
+                    if !currentActiveIds.isEmpty && cloudActiveIds.isEmpty {
+                        print("WARNING: CloudKit has no active projects but local has \(currentActiveIds.count)")
+                        print("Preserving local active status")
+                        
+                        // Merge: use cloud data but preserve local active status
+                        var mergedProjects = sharedFocusedProjects
+                        for i in 0..<mergedProjects.count {
+                            if currentActiveIds.contains(mergedProjects[i].projectId) {
+                                mergedProjects[i].status = .active
+                                if let currentProject = self.focusedProjects.first(where: { $0.projectId == mergedProjects[i].projectId }) {
+                                    mergedProjects[i].lastWorkedOn = currentProject.lastWorkedOn
+                                    mergedProjects[i].activatedDate = currentProject.activatedDate
+                                }
+                            }
+                        }
+                        self.focusedProjects = mergedProjects
+                        
+                        // Force save the corrected data back
+                        DispatchQueue.main.async { [weak self] in
+                            self?.saveData()
+                        }
+                    } else {
+                        print("Replacing local focused projects with CloudKit data")
+                        self.focusedProjects = sharedFocusedProjects
+                    }
+                }
+                if !sharedTasks.isEmpty {
+                    self.allTasks = sharedTasks
+                }
+            }
+        } catch {
+            print("Failed to sync from cloud: \(error)")
+        }
+    }
+    
+    private func syncToCloudKit() async {
+        guard #available(macOS 10.15, *) else { return }
+        guard !syncInProgress else { return }
+        
+        syncInProgress = true
+        defer { syncInProgress = false }
+        
+        do {
+            // Save data to shared storage first
+            SimpleStorageManager.shared.save(projects, forKey: "shared_projects")
+            SimpleStorageManager.shared.save(focusedProjects, forKey: "shared_focusedProjects")
+            SimpleStorageManager.shared.save(allTasks, forKey: "shared_focusTasks")
+            
+            // Sync to cloud
+            try await SimpleSyncManager.shared.syncNow()
+        } catch {
+            print("Failed to sync to cloud: \(error)")
+        }
+    }
+    
+    // MARK: - Force Sync
+    
+    func forceSync() async {
+        guard #available(macOS 10.15, *) else { return }
+        
+        print("=== FocusManager forceSync() ===")
+        Task {
+            await MainActor.run {
+                isSyncing = true
+            }
+            
+            do {
+                // First save current data
+                saveData()
+                
+                // Then do a regular sync to ensure everything is up to date
+                try await SimpleSyncManager.shared.syncNow()
+                
+                print("Force sync completed successfully")
+            } catch {
+                print("Force sync failed: \(error)")
+            }
+            
+            await MainActor.run {
+                isSyncing = false
+            }
+        }
+    }
+    
     // MARK: - Persistence
     
     private func saveData() {
+        print("=== FocusManager saveData() ===")
+        print("Saving focused projects: \(focusedProjects.count)")
+        print("  - Active: \(focusedProjects.filter { $0.status == .active }.count)")
+        print("  - Inactive: \(focusedProjects.filter { $0.status == .inactive }.count)")
+        
+        // List active projects by name
+        let activeProjects = focusedProjects.filter { $0.status == .active }
+        if !activeProjects.isEmpty {
+            print("Active projects being saved:")
+            for fp in activeProjects {
+                if let project = projects.first(where: { $0.id == fp.projectId }) {
+                    print("  - \(project.name)")
+                }
+            }
+        }
+        
+        // Save to local UserDefaults
         do {
             let projectsData = try JSONEncoder().encode(focusedProjects)
             UserDefaults.standard.set(projectsData, forKey: "focusedProjects")
             
             let tasksData = try JSONEncoder().encode(allTasks)
             UserDefaults.standard.set(tasksData, forKey: "focusTasks")
+            
+            let slotsData = try JSONEncoder().encode(projectSlots)
+            UserDefaults.standard.set(slotsData, forKey: "projectSlots")
         } catch {
             print("Failed to save focus data: \(error)")
+        }
+        
+        // Save to shared storage
+        print("Saving to shared storage:")
+        print("  - Projects: \(projects.count)")
+        print("  - Focused Projects: \(focusedProjects.count)")
+        print("  - Tasks: \(allTasks.count)")
+        
+        SimpleStorageManager.shared.save(projects, forKey: "shared_projects")
+        SimpleStorageManager.shared.save(focusedProjects, forKey: "shared_focusedProjects")
+        SimpleStorageManager.shared.save(allTasks, forKey: "shared_focusTasks")
+        
+        // Sync to CloudKit only if not already syncing
+        if !syncInProgress {
+            Task {
+                await syncToCloudKit()
+            }
         }
     }
     
     private func loadData() {
-        // Load projects
-        if let projectsData = UserDefaults.standard.data(forKey: "focusedProjects") {
+        // First try to load from shared storage
+        let sharedProjects = SimpleStorageManager.shared.load([Project].self, forKey: "shared_projects") ?? []
+        let sharedFocusedProjects = SimpleStorageManager.shared.load([FocusedProject].self, forKey: "shared_focusedProjects") ?? []
+        let sharedTasks = SimpleStorageManager.shared.load([FocusTask].self, forKey: "shared_focusTasks") ?? []
+        
+        print("=== FocusManager loadData() ===")
+        print("Loaded from shared storage:")
+        print("  - Projects: \(sharedProjects.count)")
+        print("  - Focused Projects: \(sharedFocusedProjects.count)")
+        if !sharedFocusedProjects.isEmpty {
+            for fp in sharedFocusedProjects {
+                if let project = sharedProjects.first(where: { $0.id == fp.projectId }) {
+                    print("    - \(project.name): \(fp.status.rawValue)")
+                }
+            }
+        }
+        print("  - Tasks: \(sharedTasks.count)")
+        
+        if !sharedProjects.isEmpty {
+            projects = sharedProjects
+        }
+        
+        // Check shared storage first, then fall back to UserDefaults
+        if !sharedFocusedProjects.isEmpty {
+            focusedProjects = sharedFocusedProjects
+            print("Using \(focusedProjects.count) focused projects from shared storage")
+            print("  - Active: \(focusedProjects.filter { $0.status == .active }.count)")
+            print("  - Inactive: \(focusedProjects.filter { $0.status == .inactive }.count)")
+        } else if let projectsData = UserDefaults.standard.data(forKey: "focusedProjects") {
             do {
                 focusedProjects = try JSONDecoder().decode([FocusedProject].self, from: projectsData)
+                print("Loaded \(focusedProjects.count) focused projects from UserDefaults")
+                print("  - Active: \(focusedProjects.filter { $0.status == .active }.count)")
+                print("  - Inactive: \(focusedProjects.filter { $0.status == .inactive }.count)")
+                // Save to shared storage for syncing
+                SimpleStorageManager.shared.save(focusedProjects, forKey: "shared_focusedProjects")
+                print("Migrated focused projects to shared storage")
             } catch {
                 print("Failed to load focused projects: \(error)")
                 focusedProjects = []
             }
+        } else {
+            print("No focused projects found in storage")
         }
         
-        // Load tasks
-        if let tasksData = UserDefaults.standard.data(forKey: "focusTasks") {
+        if !sharedTasks.isEmpty {
+            allTasks = sharedTasks
+        } else if let tasksData = UserDefaults.standard.data(forKey: "focusTasks") {
             do {
                 allTasks = try JSONDecoder().decode([FocusTask].self, from: tasksData)
+                // Save to shared storage for syncing
+                SimpleStorageManager.shared.save(allTasks, forKey: "shared_focusTasks")
             } catch {
                 print("Failed to load focus tasks: \(error)")
                 allTasks = []
+            }
+        }
+        
+        // Load project slots
+        if let slotsData = UserDefaults.standard.data(forKey: "projectSlots") {
+            do {
+                projectSlots = try JSONDecoder().decode([ProjectManagerCore.ProjectSlot].self, from: slotsData)
+                print("Loaded \(projectSlots.count) project slots")
+            } catch {
+                print("Failed to load project slots: \(error)")
+                projectSlots = []
             }
         }
     }
@@ -435,13 +860,45 @@ class FocusManager: ObservableObject {
     }
     
     func getProjectColor(for projectId: UUID) -> String {
-        // Find the index of this project in the active projects list
-        guard let index = activeProjects.firstIndex(where: { $0.projectId == projectId }) else {
+        // Check if this project is active
+        guard let projectIndex = activeProjects.firstIndex(where: { $0.projectId == projectId }) else {
             return "gray"
         }
         
-        // Color palette for up to 5 projects
+        // Color palette for projects
         let colors = ["blue", "green", "orange", "purple", "pink"]
-        return colors[index % colors.count]
+        
+        // Use the index of the project in the active projects array for stable color assignment
+        let colorIndex = projectIndex % colors.count
+        
+        return colors[colorIndex]
+    }
+    
+    func getIncompleteTaskCount(for projectId: UUID) -> Int {
+        // First check if we have tasks loaded for active projects
+        if activeProjects.contains(where: { $0.projectId == projectId }) {
+            return allTasks.filter { 
+                $0.projectId == projectId && $0.status != .completed 
+            }.count
+        }
+        
+        // For inactive projects, load from the project overview file
+        guard let project = projects.first(where: { $0.id == projectId }) else { return 0 }
+        
+        let viewModel = OverviewEditorViewModel(project: project)
+        viewModel.loadOverview()
+        
+        let nextSteps = viewModel.projectOverview.nextSteps
+        let lines = nextSteps.split(separator: "\n")
+        
+        var incompleteCount = 0
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("- [ ]") {
+                incompleteCount += 1
+            }
+        }
+        
+        return incompleteCount
     }
 }

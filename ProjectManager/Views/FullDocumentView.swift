@@ -1,4 +1,5 @@
 import SwiftUI
+import ProjectManagerCore
 
 struct FullDocumentView: View {
     @ObservedObject var viewModel: OverviewEditorViewModel

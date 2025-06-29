@@ -1,4 +1,5 @@
 import SwiftUI
+import ProjectManagerCore
 
 // Extension for corner radius on specific corners
 extension View {

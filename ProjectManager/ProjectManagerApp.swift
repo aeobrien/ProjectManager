@@ -6,16 +6,30 @@
 //
 
 import SwiftUI
+import Combine
 
 @main
 struct ProjectManagerApp: App {
     @StateObject private var projectsManager = ProjectsManager()
+    @StateObject private var focusManager = FocusManager()
     
     var body: some Scene {
         WindowGroup {
             ProjectsOverviewView()
                 .environmentObject(projectsManager)
+                .environmentObject(focusManager)
                 .frame(minWidth: 1200, minHeight: 700)
+                .onAppear {
+                    // Connect the managers and sync projects
+                    focusManager.syncWithProjects(projectsManager.projects)
+                    
+                    // Watch for project changes
+                    projectsManager.$projects
+                        .sink { projects in
+                            focusManager.syncWithProjects(projects)
+                        }
+                        .store(in: &focusManager.cancellables)
+                }
         }
         .commands {
             SidebarCommands()

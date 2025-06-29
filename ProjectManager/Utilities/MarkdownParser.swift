@@ -1,4 +1,5 @@
 import Foundation
+import ProjectManagerCore
 
 class MarkdownParser {
     static func parseProjectOverview(from content: String) -> ProjectOverview {
@@ -19,6 +20,8 @@ class MarkdownParser {
                 overview.versionHistory = content
             } else if headerLine == "Core Concept" {
                 overview.coreConcept = content
+            } else if headerLine == "Tags" {
+                overview.tags = content
             } else if headerLine == "Guiding Principles & Intentions" || headerLine == "Guiding Principles" {
                 overview.guidingPrinciples = content
             } else if headerLine == "Key Features & Functionality" || headerLine == "Key Features" {
@@ -65,7 +68,8 @@ class MarkdownParser {
         if sectionStart == nil {
             let alternatives: [String: [String]] = [
                 "Current Status & Progress": ["Current Status", "Status"],
-                "Next Steps": ["Next Steps"]
+                "Next Steps": ["Next Steps"],
+                "Tags": ["Tags"]
             ]
             
             if let alts = alternatives[sectionName] {
@@ -79,6 +83,27 @@ class MarkdownParser {
         }
         
         guard let sectionStartIndex = sectionStart else {
+            // Section doesn't exist, add it after Core Concept if this is Tags
+            if sectionName == "Tags" {
+                // Find Core Concept section
+                if let coreConceptIndex = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "## Core Concept" }) {
+                    // Find the end of Core Concept section
+                    var insertIndex = coreConceptIndex + 1
+                    while insertIndex < lines.count {
+                        let line = lines[insertIndex].trimmingCharacters(in: .whitespaces)
+                        if line.hasPrefix("##") && !line.hasPrefix("###") {
+                            break
+                        }
+                        insertIndex += 1
+                    }
+                    
+                    // Insert the new Tags section
+                    let newContentLines = newContent.isEmpty ? [""] : newContent.components(separatedBy: "\n")
+                    let section = ["", "## Tags"] + newContentLines + [""]
+                    lines.insert(contentsOf: section, at: insertIndex)
+                    return lines.joined(separator: "\n")
+                }
+            }
             return content
         }
         

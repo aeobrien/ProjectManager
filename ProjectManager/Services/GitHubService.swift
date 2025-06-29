@@ -83,16 +83,11 @@ struct GitHubRepository {
 // MARK: - GitHub Service
 class GitHubService {
     static let shared = GitHubService()
-
-    private let accessToken = ProcessInfo.processInfo.environment["GITHUB_ACCESS_TOKEN"]
-  
-
     
     private var accessToken: String? {
-        return KeychainManager.shared.getToken()
+        return SecureTokenStorage.shared.getGitHubToken()
     }
     
-
     private init() {}
     
     func hasAccessToken() -> Bool {

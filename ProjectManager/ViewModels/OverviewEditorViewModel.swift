@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import ProjectManagerCore
 
 class OverviewEditorViewModel: ObservableObject {
     @Published var projectOverview = ProjectOverview()
@@ -124,6 +125,7 @@ class OverviewEditorViewModel: ObservableObject {
         
         content = MarkdownParser.updateSection(in: content, sectionName: "Version History", newContent: projectOverview.versionHistory)
         content = MarkdownParser.updateSection(in: content, sectionName: "Core Concept", newContent: projectOverview.coreConcept)
+        content = MarkdownParser.updateSection(in: content, sectionName: "Tags", newContent: projectOverview.tags)
         content = MarkdownParser.updateSection(in: content, sectionName: "Guiding Principles & Intentions", newContent: projectOverview.guidingPrinciples)
         content = MarkdownParser.updateSection(in: content, sectionName: "Key Features & Functionality", newContent: projectOverview.keyFeatures)
         content = MarkdownParser.updateSection(in: content, sectionName: "Architecture & Structure", newContent: projectOverview.architecture)

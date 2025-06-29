@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import Foundation
+import ProjectManagerCore
 
 struct NewProjectForm: View {
     @ObservedObject var projectsManager: ProjectsManager

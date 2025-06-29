@@ -1,12 +1,14 @@
 import SwiftUI
+import ProjectManagerCore
 
 struct FocusBoardView: View {
     @EnvironmentObject var projectsManager: ProjectsManager
-    @StateObject private var focusManager = FocusManager()
+    @EnvironmentObject var focusManager: FocusManager
     @State private var showingNewTaskDialog = false
     @State private var showingProjectSelector = false
     @State private var selectedProjectForNewTask: FocusedProject?
     @State private var newTaskText = ""
+    @State private var activeAddTaskSheet: AddTaskButton.ActiveSheet?
     @State private var selectedProjectsForFilter: Set<UUID> = {
         if let data = UserDefaults.standard.data(forKey: "focusBoardFilteredProjects"),
            let ids = try? JSONDecoder().decode(Set<UUID>.self, from: data) {
@@ -14,198 +16,93 @@ struct FocusBoardView: View {
         }
         return []
     }()
+    @State private var selectedTagsForFilter: Set<String> = {
+        if let data = UserDefaults.standard.data(forKey: "focusBoardFilteredTags"),
+           let tags = try? JSONDecoder().decode(Set<String>.self, from: data) {
+            return tags
+        }
+        return []
+    }()
     
     // Computed properties for filtered tasks
     private var isFilterActive: Bool {
-        !selectedProjectsForFilter.isEmpty
+        !selectedProjectsForFilter.isEmpty || !selectedTagsForFilter.isEmpty
+    }
+    
+    private func taskMatchesFilters(_ task: FocusTask) -> Bool {
+        // Check project filter
+        if !selectedProjectsForFilter.isEmpty && !selectedProjectsForFilter.contains(task.projectId) {
+            return false
+        }
+        
+        // Check tag filter
+        if !selectedTagsForFilter.isEmpty {
+            // Get project tags
+            guard let project = focusManager.getProject(for: FocusedProject(projectId: task.projectId, status: .active)) else {
+                return false
+            }
+            let viewModel = OverviewEditorViewModel(project: project)
+            viewModel.loadOverview()
+            let projectTags = projectsManager.tagManager.extractTags(from: viewModel.projectOverview.tags)
+            
+            // Check if project has any of the selected tags (OR logic)
+            let hasMatchingTag = selectedTagsForFilter.contains { tag in
+                projectTags.contains(tag)
+            }
+            if !hasMatchingTag {
+                return false
+            }
+        }
+        
+        return true
     }
     
     private var filteredTodoTasks: [FocusTask] {
         guard isFilterActive else { return focusManager.todoTasks }
-        return focusManager.todoTasks.filter { task in
-            selectedProjectsForFilter.contains(task.projectId)
-        }
+        return focusManager.todoTasks.filter(taskMatchesFilters)
     }
     
     private var filteredInProgressTasks: [FocusTask] {
         guard isFilterActive else { return focusManager.inProgressTasks }
-        return focusManager.inProgressTasks.filter { task in
-            selectedProjectsForFilter.contains(task.projectId)
-        }
+        return focusManager.inProgressTasks.filter(taskMatchesFilters)
     }
     
     private var filteredCompletedTasks: [FocusTask] {
         guard isFilterActive else { return focusManager.completedTasks }
-        return focusManager.completedTasks.filter { task in
-            selectedProjectsForFilter.contains(task.projectId)
-        }
+        return focusManager.completedTasks.filter(taskMatchesFilters)
     }
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            VStack(spacing: 12) {
-                HStack {
-                    Text("Focus Board")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                    
-                    Spacer()
-                    
-                    // Active project count and warnings
-                    HStack {
-                        if focusManager.isOverActiveLimit {
-                            HStack {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundColor(.orange)
-                                Text("\(focusManager.activeProjects.count) active projects (max \(focusManager.maxActive))")
-                                    .font(.caption)
-                                    .foregroundColor(.orange)
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.orange.opacity(0.1))
-                            .cornerRadius(6)
-                        } else if focusManager.isUnderActiveMinimum {
-                            HStack {
-                                Image(systemName: "info.circle")
-                                    .foregroundColor(.blue)
-                                Text("\(focusManager.activeProjects.count) active projects (min \(focusManager.minActive) recommended)")
-                                    .font(.caption)
-                                    .foregroundColor(.blue)
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.blue.opacity(0.1))
-                            .cornerRadius(6)
-                        } else {
-                            Text("\(focusManager.activeProjects.count) active projects")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    
-                    // Removed filter button - now inline
-                    
-                    Button("Manage Projects") {
-                        showingProjectSelector = true
-                    }
-                    
-                    Button("Refresh") {
-                        focusManager.syncWithProjects(projectsManager.projects)
-                    }
-                }
-                
-                // Insights row and filter indicators
-                HStack {
-                    if isFilterActive {
-                        HStack {
-                            Image(systemName: "line.3.horizontal.decrease.circle.fill")
-                                .foregroundColor(.orange)
-                            Text("Filtered: \(selectedProjectsForFilter.count) project(s)")
-                                .font(.caption)
-                                .foregroundColor(.orange)
-                            Button("Clear") {
-                                selectedProjectsForFilter.removeAll()
-                            }
-                            .font(.caption2)
-                            .foregroundColor(.orange)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.orange.opacity(0.1))
-                        .cornerRadius(6)
-                    }
-                    
-                    if !focusManager.staleActiveProjects.isEmpty {
-                        HStack {
-                            Image(systemName: "clock")
-                                .foregroundColor(.orange)
-                            Text("\(focusManager.staleActiveProjects.count) stale project(s)")
-                                .font(.caption)
-                                .foregroundColor(.orange)
-                        }
-                    }
-                    
-                    if !focusManager.projectsWithNoActiveTasks.isEmpty {
-                        HStack {
-                            Image(systemName: "checkmark.circle")
-                                .foregroundColor(.green)
-                            Text("\(focusManager.projectsWithNoActiveTasks.count) project(s) with no tasks")
-                                .font(.caption)
-                                .foregroundColor(.green)
-                        }
-                    }
-                    
-                    Spacer()
-                }
-            }
-            .padding()
+            FocusBoardHeaderView(focusManager: focusManager, showingProjectSelector: $showingProjectSelector)
             
             Divider()
             
-            // Project Filter Section
-            if !focusManager.activeProjects.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(focusManager.activeProjects) { project in
-                            ProjectFilterChip(
-                                project: project,
-                                focusManager: focusManager,
-                                selectedProjects: $selectedProjectsForFilter
-                            )
-                        }
-                    }
-                    .padding(.horizontal)
-                }
-                .frame(height: 40)
-                
-                Divider()
-            }
+            ProjectFilterView(focusManager: focusManager, selectedProjectsForFilter: $selectedProjectsForFilter)
             
-            // Task Board - 3 columns for task statuses
-            HStack(alignment: .top, spacing: 1) {
-                // To Do Column
-                TaskColumnView(
-                    title: "To Do",
-                    subtitle: TaskStatus.todo.description,
-                    tasks: filteredTodoTasks,
-                    taskStatus: .todo,
-                    focusManager: focusManager,
-                    projectsManager: projectsManager
-                )
-                
-                Divider()
-                
-                // In Progress Column
-                TaskColumnView(
-                    title: "In Progress",
-                    subtitle: TaskStatus.inProgress.description,
-                    tasks: filteredInProgressTasks,
-                    taskStatus: .inProgress,
-                    focusManager: focusManager,
-                    projectsManager: projectsManager
-                )
-                
-                Divider()
-                
-                // Completed Column
-                TaskColumnView(
-                    title: "Completed",
-                    subtitle: TaskStatus.completed.description,
-                    tasks: filteredCompletedTasks,
-                    taskStatus: .completed,
-                    focusManager: focusManager,
-                    projectsManager: projectsManager
-                )
-            }
+            TagFilterView(tagManager: projectsManager.tagManager, focusManager: focusManager, selectedTagsForFilter: $selectedTagsForFilter)
+            
+            TaskBoardView(focusManager: focusManager, projectsManager: projectsManager, selectedProjectsForFilter: $selectedProjectsForFilter)
         }
         .frame(minWidth: 1200, minHeight: 600, maxHeight: .infinity)
-        .onAppear {
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            // Refresh when window becomes active
+            focusManager.refreshTasksFromActiveProjects()
+            // Clean up filter for removed projects
+            cleanupFilterForInactiveProjects()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            // Also refresh when the app becomes active
             focusManager.syncWithProjects(projectsManager.projects)
         }
         .onChange(of: projectsManager.projects) { newProjects in
             focusManager.syncWithProjects(newProjects)
+            // Clean up filter for removed projects
+            cleanupFilterForInactiveProjects()
+        }
+        .onChange(of: focusManager.activeProjects) { _ in
+            // Clean up filter when active projects change
+            cleanupFilterForInactiveProjects()
         }
         .onChange(of: selectedProjectsForFilter) { newFilter in
             // Save filter to UserDefaults
@@ -213,12 +110,73 @@ struct FocusBoardView: View {
                 UserDefaults.standard.set(data, forKey: "focusBoardFilteredProjects")
             }
         }
+        .onChange(of: selectedTagsForFilter) { newFilter in
+            // Save tag filter to UserDefaults
+            if let data = try? JSONEncoder().encode(newFilter) {
+                UserDefaults.standard.set(data, forKey: "focusBoardFilteredTags")
+            }
+        }
         .sheet(isPresented: $showingProjectSelector) {
             ProjectSelectorView(focusManager: focusManager)
+                .environmentObject(projectsManager)
         }
         .sheet(isPresented: $focusManager.showingProjectSelector) {
             ProjectReplacementDialog(focusManager: focusManager)
         }
+        .onChange(of: focusManager.showAddTaskDialog) { showDialog in
+            if showDialog {
+                // Determine which sheet to show based on active projects and filter
+                if focusManager.activeProjects.count == 1 {
+                    activeAddTaskSheet = .add(project: focusManager.activeProjects[0])
+                } else if selectedProjectsForFilter.count == 1,
+                          let projectId = selectedProjectsForFilter.first,
+                          let project = focusManager.activeProjects.first(where: { $0.projectId == projectId }) {
+                    // If filtered to one project, pre-select it
+                    activeAddTaskSheet = .add(project: project)
+                } else {
+                    activeAddTaskSheet = .picker
+                }
+                focusManager.showAddTaskDialog = false
+            }
+        }
+        .sheet(item: $activeAddTaskSheet) { sheet in
+            switch sheet {
+            case .picker:
+                ProjectPickerDialog(
+                    activeProjects: focusManager.activeProjects,
+                    focusManager: focusManager,
+                    onSelect: { project in
+                        activeAddTaskSheet = .add(project: project)
+                    },
+                    onCancel: {
+                        activeAddTaskSheet = nil
+                    }
+                )
+                .environmentObject(projectsManager)
+                
+            case .add(let project):
+                AddTaskDialog(
+                    newTaskText: $newTaskText,
+                    projectName: focusManager.getProject(for: project)?.name ?? "Unknown",
+                    onSave: {
+                        focusManager.addTask(to: project, text: newTaskText)
+                        newTaskText = ""
+                        activeAddTaskSheet = nil
+                    },
+                    onCancel: {
+                        newTaskText = ""
+                        activeAddTaskSheet = nil
+                    }
+                )
+                .environmentObject(projectsManager)
+            }
+        }
+    }
+    
+    private func cleanupFilterForInactiveProjects() {
+        let activeProjectIds = Set(focusManager.activeProjects.map { $0.projectId })
+        // Remove any filtered projects that are no longer active
+        selectedProjectsForFilter = selectedProjectsForFilter.intersection(activeProjectIds)
     }
 }
 
@@ -262,12 +220,23 @@ struct TaskColumnView: View {
             // Tasks List
             ScrollView {
                 LazyVStack(spacing: 8) {
-                    ForEach(tasks) { task in
-                        TaskCardView(
-                            task: task,
-                            focusManager: focusManager,
-                            projectsManager: projectsManager
-                        )
+                    // Group tasks by project
+                    let groupedTasks = Dictionary(grouping: tasks) { $0.projectId }
+                    let sortedProjectIds = groupedTasks.keys.sorted { id1, id2 in
+                        // Sort by project name for consistent ordering
+                        let name1 = focusManager.getProject(for: FocusedProject(projectId: id1, status: .active))?.name ?? ""
+                        let name2 = focusManager.getProject(for: FocusedProject(projectId: id2, status: .active))?.name ?? ""
+                        return name1.localizedStandardCompare(name2) == .orderedAscending
+                    }
+                    
+                    ForEach(sortedProjectIds, id: \.self) { projectId in
+                        ForEach(groupedTasks[projectId] ?? []) { task in
+                            TaskCardView(
+                                task: task,
+                                focusManager: focusManager,
+                                projectsManager: projectsManager
+                            )
+                        }
                     }
                     
                     // Add task button for To Do column
@@ -359,12 +328,22 @@ struct TaskCardView: View {
                 .buttonStyle(.plain)
             }
             
-            // Task text (main content)
-            Text(task.displayText)
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .lineLimit(3)
-                .multilineTextAlignment(.leading)
+            // Task text (main content) with completion date if applicable
+            HStack(alignment: .top, spacing: 4) {
+                Text(task.displayText)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+                
+                if task.status == .completed, let completedDate = task.completedDate {
+                    Text("(\(completedDate.formatted(date: .abbreviated, time: .omitted)))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer(minLength: 0)
+            }
             
             // Task metadata
             VStack(alignment: .leading, spacing: 4) {
@@ -433,22 +412,48 @@ struct TaskCardView: View {
     }
 }
 
+/// Button that lets the user add a task to the Focus Board.
+/// Uses a single `.sheet(item:)` to avoid SwiftUI’s “only the last sheet wins” rule.
 struct AddTaskButton: View {
-    let focusManager: FocusManager
-    @State private var showingTaskDialog = false
-    @State private var showingProjectPicker = false
-    @State private var newTaskText = ""
-    @State private var selectedProject: FocusedProject?
+    
+    // MARK: – Sheet routing
+    
+    /// Identifies which sheet (if any) is showing.
+    /// Conforming to `Identifiable` lets us drive `.sheet(item:)`.
+    enum ActiveSheet: Identifiable, Equatable {
+        case picker                     // choose a project first
+        case add(project: FocusedProject) // enter task text for the chosen project
+        
+        var id: String {                // simple stable ID
+            switch self {
+            case .picker:          return "picker"
+            case .add(let p):      return p.id.uuidString
+            }
+        }
+    }
+    
+    // MARK: – Dependencies
+    
+    let focusManager: FocusManager          // injected from parent
+    @EnvironmentObject var projectsManager: ProjectsManager // still available for downstream views if needed
+    
+    // MARK: – State
+    
+    @State private var activeSheet: ActiveSheet? = nil      // current sheet
+    @State private var newTaskText = ""                     // text being typed
+    
+    // MARK: – View
     
     var body: some View {
-        Button(action: {
-            if focusManager.activeProjects.count == 1 {
-                selectedProject = focusManager.activeProjects.first
-                showingTaskDialog = true
-            } else {
-                showingProjectPicker = true
+        // The tappable button
+        Button {
+            // Decide which sheet to show
+            switch focusManager.activeProjects.count {
+            case 0:   break                                  // button is disabled in this case
+            case 1:   activeSheet = .add(project: focusManager.activeProjects[0])
+            default:  activeSheet = .picker
             }
-        }) {
+        } label: {
             HStack {
                 Image(systemName: "plus.circle")
                     .foregroundColor(focusManager.activeProjects.isEmpty ? .secondary : .accentColor)
@@ -467,83 +472,101 @@ struct AddTaskButton: View {
         }
         .buttonStyle(.plain)
         .disabled(focusManager.activeProjects.isEmpty)
-        .help(focusManager.activeProjects.isEmpty ? "No active projects. Click 'Manage Projects' to activate projects." : "Add a new task")
-        .sheet(isPresented: $showingProjectPicker) {
-            ProjectPickerDialog(
-                activeProjects: focusManager.activeProjects,
-                focusManager: focusManager,
-                onSelect: { project in
-                    selectedProject = project
-                    showingProjectPicker = false
-                    showingTaskDialog = true
-                },
-                onCancel: {
-                    showingProjectPicker = false
-                }
-            )
-        }
-        .sheet(isPresented: $showingTaskDialog) {
-            AddTaskDialog(
-                newTaskText: $newTaskText,
-                projectName: {
-                    if let project = selectedProject {
-                        return focusManager.getProject(for: project)?.name ?? "Unknown"
+        .help(focusManager.activeProjects.isEmpty
+              ? "No active projects. Click “Manage Projects” to activate projects."
+              : "Add a new task")
+        
+        // MARK: – Single sheet presenter
+        
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+                
+            // 1️⃣ Project picker
+            case .picker:
+                ProjectPickerDialog(
+                    activeProjects: focusManager.activeProjects,
+                    focusManager: focusManager,
+                    onSelect: { project in
+                        activeSheet = .add(project: project)   // chain to next sheet
+                    },
+                    onCancel: {
+                        activeSheet = nil
                     }
-                    return "Unknown"
-                }(),
-                onSave: {
-                    if let project = selectedProject {
+                )
+                .environmentObject(projectsManager)           // propagate env-object if your dialogs need it
+                
+            // 2️⃣ Add-task dialog
+            case .add(let project):
+                AddTaskDialog(
+                    newTaskText: $newTaskText,
+                    projectName: focusManager.getProject(for: project)?.name ?? "Unknown",
+                    onSave: {
                         focusManager.addTask(to: project, text: newTaskText)
+                        newTaskText = ""
+                        activeSheet = nil
+                    },
+                    onCancel: {
+                        newTaskText = ""
+                        activeSheet = nil
                     }
-                    newTaskText = ""
-                    showingTaskDialog = false
-                    selectedProject = nil
-                },
-                onCancel: {
-                    newTaskText = ""
-                    showingTaskDialog = false
-                    selectedProject = nil
-                }
-            )
+                )
+                .environmentObject(projectsManager)
+            }
         }
     }
 }
 
 struct ProjectSelectorView: View {
     @ObservedObject var focusManager: FocusManager
+    @EnvironmentObject var projectsManager: ProjectsManager
     @Environment(\.dismiss) private var dismiss
+    @State private var editingSlot: ProjectManagerCore.ProjectSlot?
     
     var body: some View {
         VStack(spacing: 16) {
             Text("Manage Active Projects")
                 .font(.headline)
             
-            Text("Select \(focusManager.minActive)-\(focusManager.maxActive) projects to focus on. Only tasks from active projects will appear in the focus board.")
+            Text("Assign projects to slots based on tag requirements. Only projects with matching tags can occupy each slot.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Active Projects (\(focusManager.activeProjects.count)/\(focusManager.maxActive))")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        
-                        ForEach(focusManager.activeProjects) { project in
-                            FocusProjectRowView(project: project, focusManager: focusManager, isActive: true)
-                        }
+                VStack(alignment: .leading, spacing: 20) {
+                    // Project Slots
+                    Text("Project Slots")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    
+                    ForEach(Array(focusManager.projectSlots.enumerated()), id: \.element.id) { index, slot in
+                        ProjectSlotView(
+                            slot: slot,
+                            slotNumber: index + 1,
+                            focusManager: focusManager,
+                            projectsManager: projectsManager,
+                            onEditTags: {
+                                editingSlot = slot
+                            }
+                        )
                     }
                     
+                    Divider()
+                    
+                    // Available Projects
                     if !focusManager.inactiveProjects.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Inactive Projects")
+                            Text("Available Projects")
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                             
                             ForEach(focusManager.inactiveProjects) { project in
-                                FocusProjectRowView(project: project, focusManager: focusManager, isActive: false)
+                                AvailableProjectRowView(
+                                    project: project,
+                                    focusManager: focusManager,
+                                    projectsManager: projectsManager
+                                )
                             }
                         }
                     }
@@ -561,6 +584,15 @@ struct ProjectSelectorView: View {
         }
         .padding()
         .frame(width: 500, height: 600)
+        .sheet(item: $editingSlot) { slot in
+            SlotTagEditor(
+                slot: slot,
+                tagManager: projectsManager.tagManager,
+                onSave: { updatedTags in
+                    focusManager.updateSlotRequirements(slot.id, requiredTags: updatedTags)
+                }
+            )
+        }
     }
 }
 
@@ -573,11 +605,21 @@ struct FocusProjectRowView: View {
         focusManager.getProject(for: project)?.name ?? "Unknown Project"
     }
     
+    var incompleteTaskCount: Int {
+        focusManager.getIncompleteTaskCount(for: project.projectId)
+    }
+    
     var body: some View {
         HStack {
-            Text(projectName)
-                .font(.subheadline)
-                .foregroundColor(.primary)
+            HStack(spacing: 4) {
+                Text(projectName)
+                    .font(.subheadline)
+                    .foregroundColor(.primary)
+                
+                Text("(\(incompleteTaskCount))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
             
             Spacer()
             
@@ -694,6 +736,13 @@ struct ProjectReplacementDialog: View {
                     
                     Spacer()
                     
+                    Button("Remove Project") {
+                        focusManager.removeProjectWithoutReplacement(project)
+                    }
+                    .foregroundColor(.red)
+                    
+                    Spacer()
+                    
                     Button("Manage Projects") {
                         focusManager.keepProject(project)
                         // This will close the dialog and user can manually manage projects
@@ -739,7 +788,7 @@ struct AddTaskDialog: View {
 
 struct ProjectFilterChip: View {
     let project: FocusedProject
-    let focusManager: FocusManager
+    @ObservedObject var focusManager: FocusManager
     @Binding var selectedProjects: Set<UUID>
     @EnvironmentObject var projectsManager: ProjectsManager
     

@@ -1,10 +1,10 @@
 import Foundation
 
-enum ProjectStatus: String, CaseIterable, Codable {
+public enum ProjectStatus: String, CaseIterable, Codable {
     case inactive = "Inactive"
     case active = "Active"
     
-    var color: String {
+    public var color: String {
         switch self {
         case .inactive:
             return "gray"
@@ -13,7 +13,7 @@ enum ProjectStatus: String, CaseIterable, Codable {
         }
     }
     
-    var description: String {
+    public var description: String {
         switch self {
         case .inactive:
             return "Projects not currently in focus"
@@ -23,12 +23,12 @@ enum ProjectStatus: String, CaseIterable, Codable {
     }
 }
 
-enum TaskStatus: String, CaseIterable, Codable {
+public enum TaskStatus: String, CaseIterable, Codable {
     case todo = "To Do"
     case inProgress = "In Progress"
     case completed = "Completed"
     
-    var color: String {
+    public var color: String {
         switch self {
         case .todo:
             return "gray"
@@ -39,7 +39,7 @@ enum TaskStatus: String, CaseIterable, Codable {
         }
     }
     
-    var description: String {
+    public var description: String {
         switch self {
         case .todo:
             return "Tasks waiting to be started"
