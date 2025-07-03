@@ -182,7 +182,15 @@ struct ProjectsOverviewView: View {
                     }
                 }
         }
-        .sheet(isPresented: $showingFocusBoard) {
+        .sheet(isPresented: $showingFocusBoard, onDismiss: {
+            // Force sync when Focus Board is closed
+            // This ensures task completion status is reflected
+            if let focusManager = projectsManager.focusManager {
+                focusManager.syncWithProjects(projectsManager.projects)
+            }
+            // Also reload projects to refresh the UI
+            projectsManager.loadProjects()
+        }) {
             FocusBoardView()
                 .environmentObject(projectsManager)
                 .frame(minWidth: 1200, minHeight: 700)
@@ -512,9 +520,19 @@ struct ProjectOverviewRow: View {
         .padding(.vertical, 12)
         .background(hasMissingFields ? Color.orange.opacity(0.1) : Color.clear)
         .onAppear {
+            // Always reload overview data when view appears
+            // This ensures changes from Focus Board are reflected
             viewModel.loadOverview()
             editedStatus = viewModel.projectOverview.currentStatus
             editedNextSteps = viewModel.projectOverview.nextSteps
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            // Also reload when app becomes active (e.g., switching back from Focus Board)
+            viewModel.loadOverview()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            // Reload when window becomes key (e.g., after closing a sheet)
+            viewModel.loadOverview()
         }
         .onChange(of: isEditing) { editing in
             if editing {

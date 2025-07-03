@@ -234,6 +234,7 @@ class FocusManager: ObservableObject {
     func updateTaskStatus(_ task: FocusTask, newStatus: TaskStatus) {
         // Update in allTasks
         if let taskIndex = allTasks.firstIndex(where: { $0.id == task.id }) {
+            let oldStatus = allTasks[taskIndex].status
             allTasks[taskIndex].updateStatus(newStatus)
             
             // Mark the project as worked on
@@ -241,15 +242,18 @@ class FocusManager: ObservableObject {
                 markProjectAsWorkedOn(project)
             }
             
-            // Update the source project's next steps if task completed
-            if newStatus == .completed {
-                updateTaskInSourceProject(task, isCompleted: true)
+            // Update the source project's next steps based on status change
+            if newStatus == .completed && oldStatus != .completed {
+                updateTaskInSourceProject(allTasks[taskIndex], isCompleted: true)
+            } else if newStatus != .completed && oldStatus == .completed {
+                updateTaskInSourceProject(allTasks[taskIndex], isCompleted: false)
             }
             
             saveData()
             
             // Check if this project now has no remaining tasks
             checkForCompletedProjects()
+        } else {
         }
     }
     
@@ -506,7 +510,15 @@ class FocusManager: ObservableObject {
             let lineStr = String(line)
             // Check if this line contains the task (without date suffix)
             let taskTextToFind = task.displayText
-            if lineStr.contains(taskTextToFind) && (lineStr.contains("- [ ]") || lineStr.contains("- [x]") || lineStr.contains("- [X]")) {
+            // Extract the text content from the line for comparison
+            let lineTextContent = lineStr
+                .replacingOccurrences(of: "- [ ] ", with: "")
+                .replacingOccurrences(of: "- [x] ", with: "")
+                .replacingOccurrences(of: "- [X] ", with: "")
+                .replacingOccurrences(of: #" \(\d{4}-\d{2}-\d{2}\)"#, with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
+            
+            if lineTextContent == taskTextToFind && (lineStr.contains("- [ ]") || lineStr.contains("- [x]") || lineStr.contains("- [X]")) {
                 // Update this line
                 if isCompleted {
                     // Remove any existing date before adding new one
@@ -860,16 +872,17 @@ class FocusManager: ObservableObject {
     }
     
     func getProjectColor(for projectId: UUID) -> String {
-        // Check if this project is active
-        guard let projectIndex = activeProjects.firstIndex(where: { $0.projectId == projectId }) else {
+        // Check if this project is in a slot
+        guard let slotIndex = projectSlots.firstIndex(where: { $0.occupiedBy == projectId }) else {
             return "gray"
         }
         
-        // Color palette for projects
+        // Color palette for projects - one color per slot
         let colors = ["blue", "green", "orange", "purple", "pink"]
         
-        // Use the index of the project in the active projects array for stable color assignment
-        let colorIndex = projectIndex % colors.count
+        // Use the slot index for stable color assignment
+        // This ensures the same slot always gets the same color
+        let colorIndex = slotIndex % colors.count
         
         return colors[colorIndex]
     }
