@@ -183,12 +183,8 @@ struct ProjectsOverviewView: View {
                 }
         }
         .sheet(isPresented: $showingFocusBoard, onDismiss: {
-            // Force sync when Focus Board is closed
+            // Force reload projects when Focus Board is closed
             // This ensures task completion status is reflected
-            if let focusManager = projectsManager.focusManager {
-                focusManager.syncWithProjects(projectsManager.projects)
-            }
-            // Also reload projects to refresh the UI
             projectsManager.loadProjects()
         }) {
             FocusBoardView()

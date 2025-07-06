@@ -6,6 +6,32 @@ struct FocusBoardTabView: View {
     @State private var selectedStatus: TaskStatus = .todo
     @State private var showingProjectManagement = false
     
+    var syncIconName: String {
+        switch focusManager.syncStatus {
+        case "Ready", "Synced":
+            return "icloud"
+        case "Not Signed In":
+            return "icloud.slash"
+        case "Syncing...":
+            return "icloud"
+        default:
+            return "exclamationmark.icloud"
+        }
+    }
+    
+    var syncIconColor: Color {
+        switch focusManager.syncStatus {
+        case "Ready", "Synced":
+            return .blue
+        case "Not Signed In":
+            return .orange
+        case "Syncing...":
+            return .green
+        default:
+            return .red
+        }
+    }
+    
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -49,9 +75,15 @@ struct FocusBoardTabView: View {
                             
                             Text("Status: \(focusManager.syncStatus)")
                                 .font(.caption)
+                            
+                            if let lastSync = SimpleSyncManager.shared.lastSyncDate {
+                                Text("Last sync: \(RelativeDateTimeFormatter().localizedString(for: lastSync, relativeTo: Date()))")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
                         } label: {
-                            Image(systemName: "icloud")
-                                .foregroundColor(focusManager.syncStatus == "Ready" ? .blue : .gray)
+                            Image(systemName: syncIconName)
+                                .foregroundColor(syncIconColor)
                         }
                     }
                 }
@@ -195,9 +227,12 @@ struct TaskCardView: View {
         .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
         .offset(x: offset.width)
         .gesture(
-            DragGesture()
+            DragGesture(minimumDistance: 30)
                 .onChanged { value in
-                    offset = value.translation
+                    // Only allow horizontal swipes
+                    if abs(value.translation.width) > abs(value.translation.height) {
+                        offset = CGSize(width: value.translation.width, height: 0)
+                    }
                 }
                 .onEnded { value in
                     withAnimation(.spring()) {

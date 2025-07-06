@@ -1,6 +1,9 @@
 import Foundation
 import Combine
 import ProjectManagerCore
+#if canImport(CloudKit)
+import CloudKit
+#endif
 
 class FocusManager: ObservableObject {
     @Published var focusedProjects: [FocusedProject] = []
@@ -21,6 +24,7 @@ class FocusManager: ObservableObject {
     @Published var syncStatus: String = ""
     @Published var isSyncing: Bool = false
     private var syncInProgress = false
+    private var lastForcePushTime: Date?
     
     init() {
         print("=== FocusManager init() ===")
@@ -137,8 +141,8 @@ class FocusManager: ObservableObject {
         print("  - Active: \(focusedProjects.filter { $0.status == .active }.count)")
         print("  - Inactive: \(focusedProjects.filter { $0.status == .inactive }.count)")
         
-        // Refresh tasks from active projects
-        refreshTasksFromActiveProjects()
+        // Refresh tasks from ALL projects
+        refreshAllTasks()
         
         // Check if any active projects need replacement
         checkForCompletedProjects()
@@ -302,29 +306,59 @@ class FocusManager: ObservableObject {
     }
     
     func refreshTasksFromActiveProjects() {
+        refreshAllTasks(activeOnly: true)
+    }
+    
+    func refreshAllTasks(activeOnly: Bool = false) {
+        print("=== Refreshing tasks (activeOnly: \(activeOnly)) ===")
+        
         // Store existing task statuses before refreshing
         let existingTaskStatuses = allTasks.reduce(into: [String: (TaskStatus, UUID)]()) { result, task in
             result[task.displayText] = (task.status, task.projectId)
         }
         
         var newTasks: [FocusTask] = []
+        var tasksByProjectAndText = [UUID: [String: FocusTask]]()
         
-        for focusedProject in activeProjects {
+        // Get projects to process - ALL projects, not just active ones
+        let projectsToProcess = activeOnly ? activeProjects : focusedProjects
+        
+        for focusedProject in projectsToProcess {
             if let project = getProject(for: focusedProject) {
                 var tasks = extractTasksFromProject(project)
                 
-                // Restore in-progress status for matching tasks
+                // Initialize project's task dictionary if needed
+                if tasksByProjectAndText[project.id] == nil {
+                    tasksByProjectAndText[project.id] = [:]
+                }
+                
+                // Restore in-progress status for matching tasks and deduplicate
                 for i in 0..<tasks.count {
+                    let taskText = tasks[i].displayText
+                    
+                    // Check if we already have this task text for this project
+                    if let existingTask = tasksByProjectAndText[project.id]?[taskText] {
+                        // Skip duplicate - we already have this task
+                        continue
+                    }
+                    
+                    // Restore status if needed
                     if let existingData = existingTaskStatuses[tasks[i].displayText],
                        existingData.1 == tasks[i].projectId,
                        existingData.0 == .inProgress {
                         tasks[i].status = .inProgress
                     }
+                    
+                    // Add to deduplication dictionary and results
+                    tasksByProjectAndText[project.id]?[taskText] = tasks[i]
+                    newTasks.append(tasks[i])
                 }
-                
-                newTasks.append(contentsOf: tasks)
             }
         }
+        
+        print("Refreshed tasks: \(newTasks.count) total (was \(allTasks.count))")
+        print("  - Active project tasks: \(newTasks.filter { task in activeProjects.contains { $0.projectId == task.projectId } }.count)")
+        print("  - Inactive project tasks: \(newTasks.filter { task in !activeProjects.contains { $0.projectId == task.projectId } }.count)")
         
         // Update allTasks in one operation to ensure proper change notification
         allTasks = newTasks
@@ -690,6 +724,12 @@ class FocusManager: ObservableObject {
         guard #available(macOS 10.15, *) else { return }
         guard !syncInProgress else { return }
         
+        // Skip sync if we just did a force push
+        if let lastPush = lastForcePushTime, Date().timeIntervalSince(lastPush) < 5 {
+            print("Skipping sync - recent force push in progress")
+            return
+        }
+        
         syncInProgress = true
         defer { syncInProgress = false }
         
@@ -727,6 +767,192 @@ class FocusManager: ObservableObject {
                 print("Force sync completed successfully")
             } catch {
                 print("Force sync failed: \(error)")
+            }
+            
+            await MainActor.run {
+                isSyncing = false
+            }
+        }
+    }
+    
+    // Clean up duplicate task records for active projects only
+    func cleanupActiveProjectTasks() async {
+        await MainActor.run {
+            isSyncing = true
+            syncStatus = "Cleaning up active project tasks..."
+        }
+        
+        do {
+            #if canImport(CloudKit)
+            let syncManager = FocusTaskSyncManager()
+            
+            // Clean up tasks for each active project
+            for (index, activeProject) in activeProjects.enumerated() {
+                if let project = getProject(for: activeProject) {
+                    print("Cleaning up tasks for: \(project.name)")
+                    try await syncManager.cleanupDuplicatesForProject(activeProject.projectId)
+                    
+                    await MainActor.run {
+                        syncStatus = "Cleaned \(index + 1)/\(activeProjects.count) projects"
+                    }
+                }
+            }
+            
+            await MainActor.run {
+                syncStatus = "Active project cleanup completed"
+            }
+            #endif
+        } catch {
+            print("Active project cleanup failed: \(error)")
+            await MainActor.run {
+                syncStatus = "Cleanup failed: \(error.localizedDescription)"
+            }
+        }
+        
+        await MainActor.run {
+            isSyncing = false
+        }
+    }
+    
+    // Clean up duplicate task records in CloudKit
+    func cleanupTaskDuplicates() async {
+        await MainActor.run {
+            isSyncing = true
+            syncStatus = "Cleaning up task duplicates..."
+        }
+        
+        do {
+            #if canImport(CloudKit)
+            let syncManager = FocusTaskSyncManager()
+            try await syncManager.cleanupDuplicates()
+            
+            await MainActor.run {
+                syncStatus = "Task cleanup completed"
+            }
+            #endif
+        } catch {
+            print("Task cleanup failed: \(error)")
+            await MainActor.run {
+                syncStatus = "Task cleanup failed: \(error.localizedDescription)"
+            }
+        }
+        
+        await MainActor.run {
+            isSyncing = false
+        }
+    }
+    
+    // Clean up duplicate CloudKit records
+    func cleanupCloudKitDuplicates() async {
+        guard #available(macOS 10.15, *) else { return }
+        
+        print("=== FocusManager cleanupCloudKitDuplicates() ===")
+        
+        Task {
+            await MainActor.run {
+                isSyncing = true
+                syncStatus = "Cleaning up duplicates..."
+            }
+            
+            do {
+                #if canImport(CloudKit)
+                let syncManager = FocusedProjectSyncManager()
+                try await syncManager.cleanupDuplicates()
+                
+                await MainActor.run {
+                    syncStatus = "Cleanup completed"
+                }
+                #endif
+            } catch {
+                print("Cleanup failed: \(error)")
+                await MainActor.run {
+                    syncStatus = "Cleanup failed: \(error.localizedDescription)"
+                }
+            }
+            
+            await MainActor.run {
+                isSyncing = false
+            }
+        }
+    }
+    
+    // Force sync all projects (including overview content)
+    func forceSyncAllProjects() async {
+        await MainActor.run {
+            isSyncing = true
+            syncStatus = "Syncing all projects..."
+        }
+        
+        do {
+            #if canImport(CloudKit)
+            // Force sync all projects with their overview content
+            try await CloudKitManager.shared.syncAll()
+            
+            await MainActor.run {
+                syncStatus = "All projects synced"
+            }
+            #endif
+        } catch {
+            print("Force sync all projects failed: \(error)")
+            await MainActor.run {
+                syncStatus = "Sync failed: \(error.localizedDescription)"
+            }
+        }
+        
+        await MainActor.run {
+            isSyncing = false
+        }
+    }
+    
+    // Force push all active projects to CloudKit
+    // This ensures the active status is properly saved
+    func forcePushActiveProjects() async {
+        guard #available(macOS 10.15, *) else { return }
+        
+        print("=== FocusManager forcePushActiveProjects() ===")
+        print("Pushing \(activeProjects.count) active projects to CloudKit")
+        
+        Task {
+            await MainActor.run {
+                isSyncing = true
+                syncStatus = "Force pushing active projects..."
+            }
+            
+            do {
+                // Save current state
+                saveData()
+                
+                // List active projects for debugging
+                for project in activeProjects {
+                    if let proj = getProject(for: project) {
+                        print("Active project: \(proj.name) (ID: \(project.projectId), Status: \(project.status.rawValue))")
+                    }
+                }
+                
+                #if canImport(CloudKit)
+                // Force update active projects in CloudKit
+                try await CloudKitManager.shared.forceUpdateActiveProjects()
+                lastForcePushTime = Date()
+                #else
+                // Fallback to regular sync
+                try await SimpleSyncManager.shared.syncNow()
+                #endif
+                
+                print("Force push of active projects completed successfully")
+                
+                await MainActor.run {
+                    syncStatus = "Active projects pushed"
+                }
+                
+                // Prevent automatic syncs for 5 seconds after force push
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                    self?.lastForcePushTime = nil
+                }
+            } catch {
+                print("Force push failed: \(error)")
+                await MainActor.run {
+                    syncStatus = "Push failed: \(error.localizedDescription)"
+                }
             }
             
             await MainActor.run {
@@ -832,17 +1058,13 @@ class FocusManager: ObservableObject {
             print("No focused projects found in storage")
         }
         
-        if !sharedTasks.isEmpty {
-            allTasks = sharedTasks
-        } else if let tasksData = UserDefaults.standard.data(forKey: "focusTasks") {
-            do {
-                allTasks = try JSONDecoder().decode([FocusTask].self, from: tasksData)
-                // Save to shared storage for syncing
-                SimpleStorageManager.shared.save(allTasks, forKey: "shared_focusTasks")
-            } catch {
-                print("Failed to load focus tasks: \(error)")
-                allTasks = []
-            }
+        // Don't load tasks from storage - always extract fresh from projects
+        // This prevents duplicate tasks from persisting
+        print("Skipping task loading from storage - will extract fresh from projects")
+        
+        // After loading projects and focused projects, refresh all tasks
+        if !projects.isEmpty && !focusedProjects.isEmpty {
+            refreshAllTasks()
         }
         
         // Load project slots

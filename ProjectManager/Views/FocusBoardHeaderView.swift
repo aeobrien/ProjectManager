@@ -65,13 +65,55 @@ struct FocusBoardHeaderView: View {
                     ProgressView()
                         .scaleEffect(0.8)
                 } else {
-                    Button("Force Sync") {
-                        Task {
-                            await focusManager.forceSync()
+                    Menu {
+                        Button("Force Sync") {
+                            Task {
+                                await focusManager.forceSync()
+                            }
                         }
+                        .keyboardShortcut("f", modifiers: [.command, .shift])
+                        
+                        Button("Force Push Active Projects") {
+                            Task {
+                                await focusManager.forcePushActiveProjects()
+                            }
+                        }
+                        
+                        Button("Force Sync All Projects") {
+                            Task {
+                                await focusManager.forceSyncAllProjects()
+                            }
+                        }
+                        
+                        Divider()
+                        
+                        Button("Clean Up Project Duplicates") {
+                            Task {
+                                await focusManager.cleanupCloudKitDuplicates()
+                            }
+                        }
+                        
+                        Button("Clean Up Active Project Tasks") {
+                            Task {
+                                await focusManager.cleanupActiveProjectTasks()
+                            }
+                        }
+                        
+                        Button("Clean Up All Task Duplicates") {
+                            Task {
+                                await focusManager.cleanupTaskDuplicates()
+                            }
+                        }
+                        
+                        if !focusManager.syncStatus.isEmpty {
+                            Divider()
+                            Text("Status: \(focusManager.syncStatus)")
+                                .font(.caption)
+                        }
+                    } label: {
+                        Label("Sync", systemImage: "arrow.clockwise.icloud")
+                            .foregroundColor(.orange)
                     }
-                    .foregroundColor(.orange)
-                    .keyboardShortcut("f", modifiers: [.command, .shift])
                 }
             }
             

@@ -27,6 +27,9 @@ class FocusManager: ObservableObject {
         
         // Sync with available projects after loading
         syncWithLoadedProjects()
+        
+        // Ensure tasks are filtered to active projects only
+        refreshTasksFromActiveProjects()
     }
     
     // MARK: - Computed Properties
@@ -50,17 +53,23 @@ class FocusManager: ObservableObject {
     }
     
     var todoTasks: [FocusTask] {
-        allTasks.filter { $0.status == .todo }
+        let activeProjectIds = Set(activeProjects.map { $0.projectId })
+        return allTasks
+            .filter { $0.status == .todo && activeProjectIds.contains($0.projectId) }
             .sorted { $0.createdDate < $1.createdDate }
     }
     
     var inProgressTasks: [FocusTask] {
-        allTasks.filter { $0.status == .inProgress }
+        let activeProjectIds = Set(activeProjects.map { $0.projectId })
+        return allTasks
+            .filter { $0.status == .inProgress && activeProjectIds.contains($0.projectId) }
             .sorted { $0.lastModified > $1.lastModified }
     }
     
     var completedTasks: [FocusTask] {
-        allTasks.filter { $0.status == .completed }
+        let activeProjectIds = Set(activeProjects.map { $0.projectId })
+        return allTasks
+            .filter { $0.status == .completed && activeProjectIds.contains($0.projectId) }
             .sorted { $0.lastModified > $1.lastModified }
     }
     
@@ -136,9 +145,41 @@ class FocusManager: ObservableObject {
     }
     
     private func refreshTasksFromActiveProjects() {
-        // For iOS, we don't extract tasks from project files
-        // Tasks are managed separately in the focus board
-        // This is a no-op but kept for compatibility
+        // Filter tasks to only include those from active projects
+        let activeProjectIds = Set(activeProjects.map { $0.projectId })
+        
+        // If there are no active projects, clear all tasks
+        if activeProjectIds.isEmpty {
+            allTasks = []
+            return
+        }
+        
+        // Deduplicate tasks by project and text
+        var tasksByProjectAndText = [UUID: [String: FocusTask]]()
+        var dedupedTasks: [FocusTask] = []
+        
+        for task in allTasks {
+            if tasksByProjectAndText[task.projectId] == nil {
+                tasksByProjectAndText[task.projectId] = [:]
+            }
+            
+            // Only add if we don't already have this task text for this project
+            if tasksByProjectAndText[task.projectId]?[task.displayText] == nil {
+                tasksByProjectAndText[task.projectId]?[task.displayText] = task
+                dedupedTasks.append(task)
+            }
+        }
+        
+        // Keep only tasks from active projects
+        let filteredTasks = dedupedTasks.filter { task in
+            activeProjectIds.contains(task.projectId)
+        }
+        
+        // Update allTasks if filtering removed any tasks
+        if filteredTasks.count != allTasks.count {
+            print("Filtered tasks from \(allTasks.count) to \(filteredTasks.count) (active projects only, deduped)")
+            allTasks = filteredTasks
+        }
     }
     
     func activateProject(_ project: FocusedProject) {
@@ -249,12 +290,31 @@ class FocusManager: ObservableObject {
                 }
             }
             if !sharedTasks.isEmpty {
-                self.allTasks = sharedTasks
-                print("Loaded \(sharedTasks.count) tasks from sync")
+                // Deduplicate tasks before assigning
+                var tasksByProjectAndText = [UUID: [String: FocusTask]]()
+                var dedupedTasks: [FocusTask] = []
+                
+                for task in sharedTasks {
+                    if tasksByProjectAndText[task.projectId] == nil {
+                        tasksByProjectAndText[task.projectId] = [:]
+                    }
+                    
+                    // Only add if we don't already have this task text for this project
+                    if tasksByProjectAndText[task.projectId]?[task.displayText] == nil {
+                        tasksByProjectAndText[task.projectId]?[task.displayText] = task
+                        dedupedTasks.append(task)
+                    }
+                }
+                
+                self.allTasks = dedupedTasks
+                print("Loaded \(dedupedTasks.count) tasks from sync (deduped from \(sharedTasks.count))")
             }
             
             // After loading all data, clean up any orphaned focused projects
             syncWithProjects(self.projects)
+            
+            // Filter tasks to only show those from active projects
+            refreshTasksFromActiveProjects()
             
         } catch {
             print("Failed to sync from cloud: \(error)")

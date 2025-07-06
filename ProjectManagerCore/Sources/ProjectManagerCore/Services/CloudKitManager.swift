@@ -169,6 +169,67 @@ public final class CloudKitManager: ObservableObject {
     
     // MARK: - Sync Operations
     
+    public func forceUpdateActiveProjects() async throws {
+        print("=== CloudKitManager forceUpdateActiveProjects ===")
+        
+        await MainActor.run {
+            isSyncing = true
+            syncStatus = "Force updating active projects..."
+        }
+        
+        do {
+            // Get active focused projects
+            let localFocusedProjects = SimpleStorageManager.shared.load([FocusedProject].self, forKey: "shared_focusedProjects") ?? []
+            let activeProjects = localFocusedProjects.filter { $0.status == .active }
+            
+            print("Found \(activeProjects.count) active projects to force update")
+            
+            if !activeProjects.isEmpty {
+                // Force update only the active projects
+                try await focusedProjectSyncManager.forceUpdate(activeProjects)
+                
+                // Wait longer for CloudKit to process and propagate changes
+                print("Waiting for CloudKit propagation...")
+                try await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+                
+                // Verify the update by fetching the records back
+                let projectIds = activeProjects.map { $0.projectId }
+                let verifiedProjects = try await focusedProjectSyncManager.fetchByIds(projectIds)
+                
+                let activeCount = verifiedProjects.filter { $0.status == .active }.count
+                print("Verification: \(activeCount) of \(verifiedProjects.count) projects are active in CloudKit")
+                
+                // Update shared storage with verified data
+                var allProjects = localFocusedProjects
+                for verified in verifiedProjects {
+                    if let index = allProjects.firstIndex(where: { $0.projectId == verified.projectId }) {
+                        allProjects[index] = verified
+                    }
+                }
+                SimpleStorageManager.shared.save(allProjects, forKey: "shared_focusedProjects")
+                
+                await MainActor.run {
+                    syncStatus = "Active projects updated (\(activeCount) verified)"
+                }
+                
+                // Post notification that force update completed
+                NotificationCenter.default.post(name: Notification.Name("ForceUpdateCompleted"), object: nil)
+            }
+            
+            await MainActor.run {
+                lastSyncDate = Date()
+                isSyncing = false
+            }
+            
+        } catch {
+            await MainActor.run {
+                syncStatus = "Error: \(error.localizedDescription)"
+                isSyncing = false
+            }
+            throw error
+        }
+    }
+    
     public func syncAll() async throws {
         if !schemaInitialized {
             print("Waiting for schema initialization...")
