@@ -33,6 +33,15 @@ struct NewProjectForm: View {
     @State private var processingStatus = "Ready to record"
     @State private var isProcessing = false
     
+    // Text input state
+    @State private var inputMode: InputMode = .voice
+    @State private var textInput = ""
+    
+    enum InputMode: String, CaseIterable {
+        case voice = "Voice"
+        case text = "Text"
+    }
+    
     // Audio recording properties
     @State private var audioRecorder: AVAudioRecorder?
     @State private var recordingURL: URL?
@@ -353,7 +362,7 @@ struct NewProjectForm: View {
                 }
                 .keyboardShortcut(.escape)
                 
-                Button("Voice Input") {
+                Button("Vibe Input") {
                     showingVoiceInput = true
                 }
                 .buttonStyle(.borderedProminent)
@@ -371,7 +380,9 @@ struct NewProjectForm: View {
         }
         .frame(width: 800, height: 800)
         .sheet(isPresented: $showingVoiceInput) {
-            VoiceInputSheet(
+            VibeInputSheet(
+                inputMode: $inputMode,
+                textInput: $textInput,
                 isRecording: $isRecording,
                 recordingDuration: $recordingDuration,
                 audioLevel: $audioLevel,
@@ -379,6 +390,7 @@ struct NewProjectForm: View {
                 isProcessing: $isProcessing,
                 onStartRecording: startRecording,
                 onStopRecording: stopRecording,
+                onProcessText: processTextInput,
                 onDismiss: { showingVoiceInput = false }
             )
         }
@@ -624,6 +636,153 @@ struct NewProjectForm: View {
         }
     }
     
+    private func processTextInput() {
+        guard !textInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            processingStatus = "Please enter some text first"
+            return
+        }
+        
+        isProcessing = true
+        processingStatus = "Processing text input..."
+        
+        // Use the same transcription service but skip the audio transcription step
+        transcriptionService = TranscriptionService()
+        
+        // Use the private processTranscription method directly (we need to access it through the transcribeAudio method)
+        // Since processTranscription is private, we'll simulate by calling transcribeAudio but with a dummy approach
+        // Instead, let's use the approach of calling the service with requiresSecondAPICall = true and a pre-transcribed text
+        
+        // We'll create a temporary file with the text and then process it
+        // Actually, let's use a better approach - create a processTextDirectly method in TranscriptionService
+        // For now, let's use a simpler approach by accessing the private method through reflection or creating a public version
+        
+        // Simple approach: simulate the GPT call directly using URLSession
+        processTextDirectlyWithGPT(
+            text: textInput,
+            prompt: generateProjectOverviewPrompt(),
+            statusUpdate: { status in
+                DispatchQueue.main.async {
+                    processingStatus = status
+                }
+            }
+        ) { result in
+            DispatchQueue.main.async {
+                isProcessing = false
+                
+                switch result {
+                case .success(let processedText):
+                    parseAndPopulateFields(from: processedText)
+                    showingVoiceInput = false
+                    textInput = "" // Clear the text input
+                    
+                case .failure(let error):
+                    processingStatus = "Error: \(error.localizedDescription)"
+                    print("Text processing error: \(error)")
+                }
+            }
+        }
+    }
+    
+    
+    private func processTextDirectlyWithGPT(
+        text: String,
+        prompt: String,
+        statusUpdate: ((String) -> Void)?,
+        completion: @escaping (Result<String, Error>) -> Void
+    ) {
+        // Get API key from secure storage
+        guard let apiKey = SecureTokenStorage.shared.getOpenAIKey() else {
+            statusUpdate?("Error: OpenAI API key not configured")
+            completion(.failure(NSError(domain: "TranscriptionError", code: 1, userInfo: [NSLocalizedDescriptionKey: "OpenAI API key not configured"])))
+            return
+        }
+        
+        guard let url = URL(string: "https://api.openai.com/v1/chat/completions") else {
+            completion(.failure(NSError(domain: "TranscriptionError", code: 2, userInfo: [NSLocalizedDescriptionKey: "Invalid API endpoint"])))
+            return
+        }
+        
+        statusUpdate?("Sending text to GPT for processing...")
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 300 // 5 minutes timeout
+        
+        let messages = [
+            ["role": "system", "content": prompt],
+            ["role": "user", "content": text]
+        ]
+        
+        let body: [String: Any] = [
+            "model": "gpt-4-turbo-preview",
+            "messages": messages,
+            "temperature": 0.7,
+            "max_tokens": 4000
+        ]
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            statusUpdate?("Processing with GPT...")
+        } catch {
+            statusUpdate?("Error preparing request: \(error.localizedDescription)")
+            completion(.failure(error))
+            return
+        }
+        
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                statusUpdate?("GPT processing failed: \(error.localizedDescription)")
+                completion(.failure(error))
+                return
+            }
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                statusUpdate?("Invalid response received")
+                completion(.failure(NSError(domain: "TranscriptionError", code: 3, userInfo: [NSLocalizedDescriptionKey: "Invalid response received"])))
+                return
+            }
+            
+            guard (200...299).contains(httpResponse.statusCode) else {
+                statusUpdate?("GPT API error (Status: \(httpResponse.statusCode))")
+                if let data = data, let errorMessage = String(data: data, encoding: .utf8) {
+                    completion(.failure(NSError(domain: "TranscriptionError", code: 4, userInfo: [NSLocalizedDescriptionKey: "API Error: \(errorMessage)"])))
+                } else {
+                    completion(.failure(NSError(domain: "TranscriptionError", code: 5, userInfo: [NSLocalizedDescriptionKey: "Server Error: \(httpResponse.statusCode)"])))
+                }
+                return
+            }
+            
+            guard let data = data else {
+                statusUpdate?("No data received from GPT")
+                completion(.failure(NSError(domain: "TranscriptionError", code: 6, userInfo: [NSLocalizedDescriptionKey: "No data received from server"])))
+                return
+            }
+            
+            do {
+                statusUpdate?("Processing GPT response...")
+                
+                if let json = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
+                   let choices = json["choices"] as? [[String: Any]],
+                   let firstChoice = choices.first,
+                   let message = firstChoice["message"] as? [String: Any],
+                   let processedText = message["content"] as? String {
+                    
+                    statusUpdate?("Processing complete!")
+                    completion(.success(processedText))
+                } else {
+                    statusUpdate?("Failed to parse GPT response")
+                    completion(.failure(NSError(domain: "TranscriptionError", code: 7, userInfo: [NSLocalizedDescriptionKey: "Failed to parse server response"])))
+                }
+            } catch {
+                statusUpdate?("Error decoding GPT response: \(error.localizedDescription)")
+                completion(.failure(error))
+            }
+        }
+        
+        task.resume()
+    }
     
     private func generateProjectOverviewPrompt() -> String {
         return """
@@ -747,9 +906,11 @@ struct NewProjectForm: View {
     }
 }
 
-// MARK: - Voice Input Sheet
+// MARK: - Vibe Input Sheet
 
-struct VoiceInputSheet: View {
+struct VibeInputSheet: View {
+    @Binding var inputMode: NewProjectForm.InputMode
+    @Binding var textInput: String
     @Binding var isRecording: Bool
     @Binding var recordingDuration: TimeInterval
     @Binding var audioLevel: Float
@@ -758,12 +919,13 @@ struct VoiceInputSheet: View {
     
     let onStartRecording: () -> Void
     let onStopRecording: () -> Void
+    let onProcessText: () -> Void
     let onDismiss: () -> Void
     
     var body: some View {
         VStack(spacing: 24) {
             VStack(spacing: 16) {
-                Text("Voice Input")
+                Text("Vibe Input")
                     .font(.largeTitle)
                     .fontWeight(.bold)
                 
@@ -771,62 +933,115 @@ struct VoiceInputSheet: View {
                     .font(.body)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
+                
+                // Mode selector
+                Picker("Input Mode", selection: $inputMode) {
+                    ForEach(NewProjectForm.InputMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
             }
             
             VStack(spacing: 20) {
-                // Recording visualization
-                ZStack {
-                    Circle()
-                        .fill(isRecording ? Color.red.opacity(0.2) : Color.gray.opacity(0.2))
-                        .frame(width: 200, height: 200)
-                    
-                    Circle()
-                        .fill(isRecording ? Color.red : Color.gray)
-                        .frame(width: 80 + CGFloat(audioLevel * 60), height: 80 + CGFloat(audioLevel * 60))
-                        .animation(.easeInOut(duration: 0.1), value: audioLevel)
-                    
-                    Image(systemName: isRecording ? "stop.fill" : "mic.fill")
-                        .font(.system(size: 40))
-                        .foregroundColor(.white)
-                }
-                .onTapGesture {
-                    if isRecording {
-                        onStopRecording()
-                    } else if !isProcessing {
-                        onStartRecording()
+                if inputMode == .voice {
+                    // Voice input mode - existing functionality
+                    // Recording visualization
+                    ZStack {
+                        Circle()
+                            .fill(isRecording ? Color.red.opacity(0.2) : Color.gray.opacity(0.2))
+                            .frame(width: 200, height: 200)
+                        
+                        Circle()
+                            .fill(isRecording ? Color.red : Color.gray)
+                            .frame(width: 80 + CGFloat(audioLevel * 60), height: 80 + CGFloat(audioLevel * 60))
+                            .animation(.easeInOut(duration: 0.1), value: audioLevel)
+                        
+                        Image(systemName: isRecording ? "stop.fill" : "mic.fill")
+                            .font(.system(size: 40))
+                            .foregroundColor(.white)
                     }
-                }
-                .disabled(isProcessing)
-                
-                // Duration and status
-                VStack(spacing: 8) {
-                    if isRecording {
-                        Text(formatDuration(recordingDuration))
-                            .font(.title2)
-                            .fontWeight(.semibold)
+                    .onTapGesture {
+                        if isRecording {
+                            onStopRecording()
+                        } else if !isProcessing {
+                            onStartRecording()
+                        }
                     }
+                    .disabled(isProcessing)
                     
-                    Text(processingStatus)
-                        .font(.body)
-                        .foregroundColor(.secondary)
-                }
-                
-                // Instructions
-                if !isRecording && !isProcessing {
+                    // Duration and status
                     VStack(spacing: 8) {
-                        Text("Tap the microphone to start recording")
+                        if isRecording {
+                            Text(formatDuration(recordingDuration))
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                        }
+                        
+                        Text(processingStatus)
                             .font(.body)
                             .foregroundColor(.secondary)
-                        
-                        Text("Speak naturally about your project idea, goals, features, and implementation plans.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
                     }
-                } else if isRecording {
-                    Text("Tap the stop button when finished")
-                        .font(.body)
-                        .foregroundColor(.secondary)
+                    
+                    // Instructions
+                    if !isRecording && !isProcessing {
+                        VStack(spacing: 8) {
+                            Text("Tap the microphone to start recording")
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                            
+                            Text("Speak naturally about your project idea, goals, features, and implementation plans.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                    } else if isRecording {
+                        Text("Tap the stop button when finished")
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                    }
+                } else {
+                    // Text input mode - new functionality
+                    VStack(spacing: 16) {
+                        Text("Enter your project description")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                        
+                        ScrollView {
+                            TextEditor(text: $textInput)
+                                .frame(minHeight: 200)
+                                .overlay(
+                                    Group {
+                                        if textInput.isEmpty {
+                                            Text("Paste or type your project description here. Include details about your project idea, goals, features, and implementation plans.")
+                                                .foregroundColor(.secondary.opacity(0.8))
+                                                .padding(.horizontal, 4)
+                                                .padding(.vertical, 8)
+                                                .allowsHitTesting(false)
+                                        }
+                                    },
+                                    alignment: .topLeading
+                                )
+                                .background(Color(NSColor.textBackgroundColor))
+                                .cornerRadius(8)
+                        }
+                        .frame(maxHeight: 250)
+                        
+                        // Process button
+                        Button("Process Text") {
+                            onProcessText()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(textInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isProcessing)
+                        
+                        // Status
+                        if isProcessing {
+                            Text(processingStatus)
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                        }
+                    }
                 }
             }
             

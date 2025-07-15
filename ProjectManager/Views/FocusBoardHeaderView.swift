@@ -122,23 +122,49 @@ struct FocusBoardHeaderView: View {
                 // Filter indicator will be handled by the parent view
                 
                 if !focusManager.staleActiveProjects.isEmpty {
-                    HStack {
-                        Image(systemName: "clock")
-                            .foregroundColor(.orange)
-                        Text("\(focusManager.staleActiveProjects.count) stale project(s)")
-                            .font(.caption)
-                            .foregroundColor(.orange)
+                    Menu {
+                        ForEach(focusManager.staleActiveProjects) { project in
+                            if let proj = focusManager.getProject(for: project) {
+                                Label(proj.name, systemImage: "clock")
+                                    .foregroundColor(.orange)
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "clock")
+                                .foregroundColor(.orange)
+                            Text("\(focusManager.staleActiveProjects.count) stale project(s)")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                            Image(systemName: "chevron.down")
+                                .font(.caption2)
+                                .foregroundColor(.orange)
+                        }
                     }
+                    .menuStyle(.borderlessButton)
                 }
                 
                 if !focusManager.projectsWithNoActiveTasks.isEmpty {
-                    HStack {
-                        Image(systemName: "checkmark.circle")
-                            .foregroundColor(.green)
-                        Text("\(focusManager.projectsWithNoActiveTasks.count) project(s) with no tasks")
-                            .font(.caption)
-                            .foregroundColor(.green)
+                    Menu {
+                        ForEach(focusManager.projectsWithNoActiveTasks) { project in
+                            if let proj = focusManager.getProject(for: project) {
+                                Label(proj.name, systemImage: "checkmark.circle")
+                                    .foregroundColor(.green)
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "checkmark.circle")
+                                .foregroundColor(.green)
+                            Text("\(focusManager.projectsWithNoActiveTasks.count) project(s) with no tasks")
+                                .font(.caption)
+                                .foregroundColor(.green)
+                            Image(systemName: "chevron.down")
+                                .font(.caption2)
+                                .foregroundColor(.green)
+                        }
                     }
+                    .menuStyle(.borderlessButton)
                 }
                 
                 Spacer()

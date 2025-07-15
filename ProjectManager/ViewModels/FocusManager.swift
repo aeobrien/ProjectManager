@@ -70,6 +70,7 @@ class FocusManager: ObservableObject {
     private func initializeSlots() {
         // If slots already exist, keep them
         if !projectSlots.isEmpty {
+            reconcileSlots()
             return
         }
         
@@ -82,6 +83,53 @@ class FocusManager: ObservableObject {
         let activeProjects = focusedProjects.filter { $0.status == .active }
         for (index, project) in activeProjects.prefix(maxActiveProjects).enumerated() {
             projectSlots[index].occupiedBy = project.projectId
+        }
+    }
+    
+    private func reconcileSlots() {
+        print("=== Reconciling slots with active projects ===")
+        
+        // Get all active project IDs
+        let activeProjectIds = Set(focusedProjects.filter { $0.status == .active }.map { $0.projectId })
+        
+        // Clear slots that reference inactive or non-existent projects
+        for i in 0..<projectSlots.count {
+            if let occupiedBy = projectSlots[i].occupiedBy {
+                if !activeProjectIds.contains(occupiedBy) {
+                    print("Clearing slot \(i+1) - project \(occupiedBy) is not active")
+                    projectSlots[i].occupiedBy = nil
+                }
+            }
+        }
+        
+        // Find active projects without slots
+        var projectsWithoutSlots: [FocusedProject] = []
+        for project in focusedProjects where project.status == .active {
+            let hasSlot = projectSlots.contains { $0.occupiedBy == project.projectId }
+            if !hasSlot {
+                projectsWithoutSlots.append(project)
+                print("Active project \(project.projectId) has no slot")
+            }
+        }
+        
+        // Assign projects without slots to empty slots
+        for project in projectsWithoutSlots {
+            // Get project tags
+            var projectTags = Set<String>()
+            if let proj = getProject(for: project) {
+                let viewModel = OverviewEditorViewModel(project: proj)
+                viewModel.loadOverview()
+                projectTags = Set(TagManager().extractTags(from: viewModel.projectOverview.tags))
+            }
+            
+            // Find first available slot that can accept this project
+            for i in 0..<projectSlots.count {
+                if projectSlots[i].isEmpty && projectSlots[i].canAcceptProject(withTags: projectTags) {
+                    projectSlots[i].occupiedBy = project.projectId
+                    print("Assigned project \(project.projectId) to slot \(i+1)")
+                    break
+                }
+            }
         }
     }
     
@@ -143,6 +191,9 @@ class FocusManager: ObservableObject {
         
         // Refresh tasks from ALL projects
         refreshAllTasks()
+        
+        // Reconcile slots with active projects
+        reconcileSlots()
         
         // Check if any active projects need replacement
         checkForCompletedProjects()
@@ -414,15 +465,18 @@ class FocusManager: ObservableObject {
     }
     
     var todoTasks: [FocusTask] {
-        allTasks.filter { $0.status == .todo }.sorted { $0.createdDate < $1.createdDate }
+        let activeProjectIds = Set(activeProjects.map { $0.projectId })
+        return allTasks.filter { $0.status == .todo && activeProjectIds.contains($0.projectId) }.sorted { $0.createdDate < $1.createdDate }
     }
     
     var inProgressTasks: [FocusTask] {
-        allTasks.filter { $0.status == .inProgress }.sorted { $0.lastModified > $1.lastModified }
+        let activeProjectIds = Set(activeProjects.map { $0.projectId })
+        return allTasks.filter { $0.status == .inProgress && activeProjectIds.contains($0.projectId) }.sorted { $0.lastModified > $1.lastModified }
     }
     
     var completedTasks: [FocusTask] {
-        allTasks.filter { $0.status == .completed }.sorted { $0.lastModified > $1.lastModified }
+        let activeProjectIds = Set(activeProjects.map { $0.projectId })
+        return allTasks.filter { $0.status == .completed && activeProjectIds.contains($0.projectId) }.sorted { $0.lastModified > $1.lastModified }
     }
     
     var isOverActiveLimit: Bool {
